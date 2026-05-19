@@ -1,0 +1,201 @@
+import { db } from '@/lib/db'
+import { NextRequest, NextResponse } from 'next/server'
+
+// GET /api/purchases/suppliers - List suppliers with filters
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const search = searchParams.get('search')
+    const activeOnly = searchParams.get('activeOnly')
+
+    const where: Record<string, unknown> = {}
+
+    if (search) {
+      where.OR = [
+        { nameAr: { contains: search } },
+        { nameEn: { contains: search } },
+        { code: { contains: search } },
+        { phone: { contains: search } },
+      ]
+    }
+
+    if (activeOnly === 'true') {
+      where.isActive = true
+    }
+
+    const suppliers = await db.supplier.findMany({
+      where,
+      orderBy: { code: 'asc' },
+    })
+
+    return NextResponse.json(suppliers)
+  } catch (error) {
+    console.error('Get suppliers error:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch suppliers' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST /api/purchases/suppliers - Create supplier
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { code, nameAr, nameEn, phone, email, address, paymentTerms, isActive } = body
+
+    if (!nameAr) {
+      return NextResponse.json(
+        { error: 'الاسم بالعربية مطلوب' },
+        { status: 400 }
+      )
+    }
+
+    // Auto-generate code if not provided: S-{seq}
+    let supplierCode = code
+    if (!supplierCode) {
+      const lastSupplier = await db.supplier.findFirst({
+        where: { code: { startsWith: 'S-' } },
+        orderBy: { code: 'desc' },
+        select: { code: true },
+      })
+
+      let seq = 1
+      if (lastSupplier) {
+        const lastSeq = parseInt(lastSupplier.code.split('-').pop() || '0', 10)
+        seq = lastSeq + 1
+      }
+      supplierCode = `S-${String(seq).padStart(4, '0')}`
+    }
+
+    // Check if code already exists
+    const existing = await db.supplier.findUnique({ where: { code: supplierCode } })
+    if (existing) {
+      return NextResponse.json(
+        { error: `كود المورد "${supplierCode}" مستخدم بالفعل` },
+        { status: 409 }
+      )
+    }
+
+    const supplier = await db.supplier.create({
+      data: {
+        code: supplierCode,
+        nameAr,
+        nameEn: nameEn || null,
+        phone: phone || null,
+        email: email || null,
+        address: address || null,
+        paymentTerms: paymentTerms ?? 30,
+        isActive: isActive ?? true,
+      },
+    })
+
+    return NextResponse.json(supplier, { status: 201 })
+  } catch (error) {
+    console.error('Create supplier error:', error)
+    return NextResponse.json(
+      { error: 'Failed to create supplier' },
+      { status: 500 }
+    )
+  }
+}
+
+// PUT /api/purchases/suppliers - Update supplier
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { id, code, nameAr, nameEn, phone, email, address, paymentTerms, isActive } = body
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'id is required' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.supplier.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'المورد غير موجود' },
+        { status: 404 }
+      )
+    }
+
+    // If code is being changed, check for uniqueness
+    if (code && code !== existing.code) {
+      const codeExists = await db.supplier.findUnique({ where: { code } })
+      if (codeExists) {
+        return NextResponse.json(
+          { error: `كود المورد "${code}" مستخدم بالفعل` },
+          { status: 409 }
+        )
+      }
+    }
+
+    const supplier = await db.supplier.update({
+      where: { id },
+      data: {
+        ...(code !== undefined && { code }),
+        ...(nameAr !== undefined && { nameAr }),
+        ...(nameEn !== undefined && { nameEn: nameEn || null }),
+        ...(phone !== undefined && { phone: phone || null }),
+        ...(email !== undefined && { email: email || null }),
+        ...(address !== undefined && { address: address || null }),
+        ...(paymentTerms !== undefined && { paymentTerms }),
+        ...(isActive !== undefined && { isActive }),
+      },
+    })
+
+    return NextResponse.json(supplier)
+  } catch (error) {
+    console.error('Update supplier error:', error)
+    return NextResponse.json(
+      { error: 'Failed to update supplier' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/purchases/suppliers - Delete supplier
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { id } = body
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'id is required' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.supplier.findUnique({
+      where: { id },
+      include: { _count: { select: { purchaseInvoices: true } } },
+    })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'المورد غير موجود' },
+        { status: 404 }
+      )
+    }
+
+    // Prevent deletion if supplier has purchase invoices
+    if (existing._count.purchaseInvoices > 0) {
+      return NextResponse.json(
+        { error: `لا يمكن حذف المورد: لديه ${existing._count.purchaseInvoices} فاتورة شراء` },
+        { status: 400 }
+      )
+    }
+
+    await db.supplier.delete({ where: { id } })
+
+    return NextResponse.json({ message: 'تم حذف المورد بنجاح' })
+  } catch (error) {
+    console.error('Delete supplier error:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete supplier' },
+      { status: 500 }
+    )
+  }
+}
