@@ -641,6 +641,9 @@ function AppContent() {
     setView,
     toggleSidebar,
     setCurrentCompany,
+    setUser,
+    setCompanies,
+    setAccessToken,
     logout,
   } = useAppStore()
 
@@ -671,13 +674,99 @@ function AppContent() {
 
   const [setupWizardOpen, setSetupWizardOpen] = useState(false)
 
-  // ── Hydrate auth state from localStorage on mount ──
+  // ── Auto-login: bypass authentication, auto-login as admin ──
   useEffect(() => {
     useAppStore.getState().hydrate()
   }, [])
 
-  // ── Loading state while hydrating ──
-  if (!hydrated) {
+  // Auto-login effect: if not authenticated after hydration, attempt auto-login
+  useEffect(() => {
+    if (!hydrated) return
+    if (isAuthenticated) return
+
+    const autoLogin = async () => {
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+        })
+        const data = await res.json()
+        if (res.ok && data.user) {
+          setAccessToken(data.token)
+          setUser({
+            id: data.user.id || '',
+            name: data.user.name || 'مدير النظام',
+            username: data.user.username || 'admin',
+            role: data.user.role || 'super_admin',
+            email: data.user.email || undefined,
+          })
+          if (data.companies && data.companies.length > 0) {
+            setCompanies(data.companies)
+            if (data.companies.length === 1) {
+              setCurrentCompany(data.companies[0].id)
+            }
+          }
+        } else {
+          // If login fails, set a default admin user directly (dev mode)
+          setUser({
+            id: 'dev-admin',
+            name: 'مدير النظام',
+            username: 'admin',
+            role: 'super_admin',
+          })
+          setAccessToken('dev-token')
+        }
+      } catch {
+        // If API fails, set a default admin user directly (dev mode)
+        setUser({
+          id: 'dev-admin',
+          name: 'مدير النظام',
+          username: 'admin',
+          role: 'super_admin',
+        })
+        setAccessToken('dev-token')
+      }
+    }
+    autoLogin()
+  }, [hydrated, isAuthenticated, setUser, setCompanies, setCurrentCompany, setAccessToken])
+
+  // Auto-select company: if authenticated but no company selected, auto-select first or create one
+  useEffect(() => {
+    if (!isAuthenticated) return
+    if (currentCompanyId) return
+    if (companies.length > 0) {
+      setCurrentCompany(companies[0].id)
+      return
+    }
+    // No companies yet - try to create a default one
+    const createDefaultCompany = async () => {
+      try {
+        const res = await fetch('/api/companies/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nameAr: 'شركة كنترول',
+            nameEn: 'Control Company',
+            baseCurrency: 'EGP',
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.company) {
+            setCompanies([{ id: data.company.id, nameAr: data.company.nameAr, nameEn: data.company.nameEn, vatRate: data.company.vatRate }])
+            setCurrentCompany(data.company.id)
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    createDefaultCompany()
+  }, [isAuthenticated, currentCompanyId, companies, setCurrentCompany, setCompanies])
+
+  // ── Loading state while hydrating or auto-logging in ──
+  if (!hydrated || !isAuthenticated) {
     return (
       <div dir="rtl" className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-3">
@@ -688,17 +777,15 @@ function AppContent() {
     )
   }
 
-  // ── Not Authenticated → Show Login ──
-  if (!isAuthenticated) {
-    return <LoginForm />
-  }
-
-  // ── Authenticated but no company → Show Company Selector ──
+  // ── Authenticated but no company → Show loading while auto-creating ──
   if (!currentCompanyId) {
     return (
-      <CompanySelector
-        onSelect={(companyId) => setCurrentCompany(companyId)}
-      />
+      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+          <p className="text-sm text-slate-500">جاري إعداد الشركة...</p>
+        </div>
+      </div>
     )
   }
 
