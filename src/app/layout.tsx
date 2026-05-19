@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "نظام ERP - إدارة الموارد",
-  description: "نظام إدارة موارد المؤسسة الشامل",
+  title: "Control ERP - نظام كنترول",
+  description: "نظام إدارة الموارد المؤسسية المتكامل - Control ERP",
 };
 
 export default function RootLayout({
@@ -27,6 +27,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        suppressHydrationWarning
       >
         {children}
         <Toaster />

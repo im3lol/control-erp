@@ -19,20 +19,21 @@ interface CompanySwitcherProps {
 }
 
 export default function CompanySwitcher({ onOpenSetup }: CompanySwitcherProps) {
-  const { currentCompanyId, companies, setCurrentCompany, setCompanies } =
+  const { user, currentCompanyId, companies, setCurrentCompany, setCompanies } =
     useAppStore()
   const [loading, setLoading] = useState(false)
 
   const currentCompany = companies.find((c) => c.id === currentCompanyId)
 
-  // Fetch user's companies on mount
+  // Fetch user's companies from the auth endpoint
   const fetchCompanies = useCallback(async () => {
+    if (!user?.id) return
     setLoading(true)
     try {
-      const res = await fetch('/api/companies?userId=admin')
+      const res = await fetch('/api/auth/companies')
       if (res.ok) {
         const data = await res.json()
-        const companyList: { id: string; nameAr: string; nameEn: string; logo?: string | null; vatRate?: number }[] = data
+        const companyList: { id: string; nameAr: string; nameEn?: string; logo?: string | null; vatRate?: number; role?: string }[] = data
         setCompanies(companyList)
         // Set first company as current if none selected
         if (!currentCompanyId && companyList.length > 0) {
@@ -44,11 +45,13 @@ export default function CompanySwitcher({ onOpenSetup }: CompanySwitcherProps) {
     } finally {
       setLoading(false)
     }
-  }, [currentCompanyId, setCompanies, setCurrentCompany])
+  }, [user?.id, currentCompanyId, setCompanies, setCurrentCompany])
 
   useEffect(() => {
-    fetchCompanies()
-  }, [])
+    if (companies.length === 0 && user?.id) {
+      fetchCompanies()
+    }
+  }, [user?.id])
 
   const handleSwitch = (companyId: string) => {
     setCurrentCompany(companyId)

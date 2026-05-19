@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, UserCog, Loader2, Shield } from 'lucide-react'
+import { Plus, Pencil, Trash2, UserCog, Loader2, Shield, ShieldCheck, ShieldAlert, Lock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -43,8 +44,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { useAppStore } from '@/lib/store'
 import { getRoleLabel } from '@/lib/erp-utils'
+import { rolePermissions, roleLabels, type Permission, hasPermission, canCreateUsers } from '@/lib/permissions'
 
 interface User {
   id: string
@@ -53,6 +61,7 @@ interface User {
   email: string
   role: string
   isActive: boolean
+  companyRole?: string
 }
 
 interface UserFormData {
@@ -61,6 +70,7 @@ interface UserFormData {
   email: string
   password: string
   role: string
+  companyRole: string
   isActive: boolean
 }
 
@@ -70,15 +80,17 @@ const initialFormData: UserFormData = {
   email: '',
   password: '',
   role: 'viewer',
+  companyRole: 'viewer',
   isActive: true,
 }
 
-const roles = ['admin', 'accountant', 'sales', 'purchase', 'inventory', 'viewer']
+const allRoles = ['super_admin', 'admin', 'accountant', 'sales', 'purchase', 'inventory', 'viewer']
 
 function getRoleBadgeColor(role: string): string {
   const colors: Record<string, string> = {
+    super_admin: 'bg-amber-50 text-amber-700 border-amber-200',
     admin: 'bg-red-50 text-red-700 border-red-200',
-    accountant: 'bg-blue-50 text-blue-700 border-blue-200',
+    accountant: 'bg-teal-50 text-teal-700 border-teal-200',
     sales: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     purchase: 'bg-orange-50 text-orange-700 border-orange-200',
     inventory: 'bg-purple-50 text-purple-700 border-purple-200',
@@ -87,14 +99,35 @@ function getRoleBadgeColor(role: string): string {
   return colors[role] || 'bg-slate-100 text-slate-600 border-slate-200'
 }
 
+function getRoleIcon(role: string) {
+  if (role === 'super_admin') return ShieldAlert
+  if (role === 'admin') return ShieldCheck
+  return Shield
+}
+
+// Permission group labels for display
+const permissionGroups: { key: string; label: string; permissions: Permission[] }[] = [
+  { key: 'settings', label: 'الإعدادات', permissions: ['settings.view', 'settings.edit'] },
+  { key: 'inventory', label: 'المخازن', permissions: ['inventory.view', 'inventory.create', 'inventory.edit', 'inventory.delete'] },
+  { key: 'accounting', label: 'الحسابات', permissions: ['accounting.view', 'accounting.create', 'accounting.post', 'accounting.reverse'] },
+  { key: 'sales', label: 'المبيعات', permissions: ['sales.view', 'sales.create', 'sales.edit', 'sales.confirm', 'sales.collect'] },
+  { key: 'purchases', label: 'المشتريات', permissions: ['purchases.view', 'purchases.create', 'purchases.edit', 'purchases.confirm', 'purchases.pay'] },
+  { key: 'reports', label: 'التقارير', permissions: ['reports.view'] },
+  { key: 'investors', label: 'المستثمرون', permissions: ['investors.view', 'investors.create', 'investors.manage'] },
+  { key: 'users', label: 'المستخدمين', permissions: ['users.view', 'users.create', 'users.edit', 'users.delete'] },
+  { key: 'companies', label: 'الشركات', permissions: ['companies.manage'] },
+]
+
 export default function UsersList() {
   const companyId = useAppStore(state => state.currentCompanyId)
   const currentUser = useAppStore(state => state.user)
-  const canAddUser = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false)
+  const [selectedRole, setSelectedRole] = useState('viewer')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [formData, setFormData] = useState<UserFormData>(initialFormData)
@@ -133,6 +166,7 @@ export default function UsersList() {
       email: user.email,
       password: '',
       role: user.role,
+      companyRole: user.companyRole || user.role,
       isActive: user.isActive,
     })
     setDialogOpen(true)
@@ -141,6 +175,11 @@ export default function UsersList() {
   const handleOpenDelete = (id: string) => {
     setDeletingId(id)
     setDeleteDialogOpen(true)
+  }
+
+  const handleShowPermissions = (role: string) => {
+    setSelectedRole(role)
+    setPermissionsDialogOpen(true)
   }
 
   const handleSubmit = async () => {
@@ -155,16 +194,13 @@ export default function UsersList() {
 
     setSubmitting(true)
     try {
-      const url = editingId
-        ? `/api/settings/users/${editingId}`
-        : '/api/settings/users'
-      const method = editingId ? 'PUT' : 'POST'
-
-      // Don't send password when editing if it's empty
-      const payload = { ...formData }
+      const payload = { ...formData, id: editingId }
       if (editingId && !payload.password) {
         delete (payload as Partial<typeof payload>).password
       }
+
+      const url = '/api/settings/users'
+      const method = editingId ? 'PUT' : 'POST'
 
       const res = await fetch(url, {
         method,
@@ -190,7 +226,11 @@ export default function UsersList() {
   const handleDelete = async () => {
     if (!deletingId) return
     try {
-      const res = await fetch(`/api/settings/users/${deletingId}?companyId=${companyId}`, { method: 'DELETE' })
+      const res = await fetch('/api/settings/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deletingId, companyId }),
+      })
       if (res.ok) {
         toast.success('تم حذف المستخدم بنجاح')
         fetchUsers()
@@ -227,7 +267,7 @@ export default function UsersList() {
   }
 
   return (
-    <>
+    <TooltipProvider>
       <Card className="border shadow-sm">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -235,21 +275,26 @@ export default function UsersList() {
               <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center">
                 <UserCog className="h-5 w-5 text-emerald-600" />
               </div>
-              <CardTitle className="text-lg">المستخدمين</CardTitle>
+              <div>
+                <CardTitle className="text-lg">المستخدمين والصلاحيات</CardTitle>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  إدارة المستخدمين وصلاحيات الوصول
+                </p>
+              </div>
             </div>
-            {canAddUser && (
-            <Button
-              onClick={handleOpenAdd}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              إضافة مستخدم
-            </Button>
+            {isAdmin && (
+              <Button
+                onClick={handleOpenAdd}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                إضافة مستخدم
+              </Button>
             )}
           </div>
         </CardHeader>
         <CardContent className="px-0">
-          <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
+          <div className="max-h-[calc(100vh-320px)] overflow-y-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
@@ -257,14 +302,15 @@ export default function UsersList() {
                   <TableHead className="text-right font-semibold">الاسم</TableHead>
                   <TableHead className="text-right font-semibold">البريد</TableHead>
                   <TableHead className="text-right font-semibold">الدور</TableHead>
+                  <TableHead className="text-right font-semibold">الصلاحيات</TableHead>
                   <TableHead className="text-right font-semibold">الحالة</TableHead>
-                  <TableHead className="text-right font-semibold">إجراءات</TableHead>
+                  {isAdmin && <TableHead className="text-right font-semibold">إجراءات</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12">
+                    <TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-12">
                       <div className="flex flex-col items-center text-slate-400">
                         <UserCog className="h-12 w-12 mb-3 text-slate-200" />
                         <p className="text-sm">لا يوجد مستخدمين مسجلين</p>
@@ -275,50 +321,75 @@ export default function UsersList() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-mono text-sm">{user.username}</TableCell>
-                      <TableCell className="font-medium">{user.name}</TableCell>
-                      <TableCell className="text-slate-500" dir="ltr">{user.email}</TableCell>
-                      <TableCell>
-                        <Badge className={getRoleBadgeColor(user.role)}>
-                          <Shield className="h-3 w-3 ml-1" />
-                          {getRoleLabel(user.role)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {user.isActive ? (
-                          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                            نشط
+                  users.map((user) => {
+                    const RoleIcon = getRoleIcon(user.role)
+                    return (
+                      <TableRow key={user.id}>
+                        <TableCell className="font-mono text-sm">{user.username}</TableCell>
+                        <TableCell className="font-medium">{user.name}</TableCell>
+                        <TableCell className="text-slate-500" dir="ltr">{user.email || '—'}</TableCell>
+                        <TableCell>
+                          <Badge className={getRoleBadgeColor(user.role)}>
+                            <RoleIcon className="h-3 w-3 ml-1" />
+                            {getRoleLabel(user.role)}
                           </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="bg-slate-100 text-slate-500">
-                            غير نشط
-                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1 text-xs text-slate-500 hover:text-emerald-600"
+                                onClick={() => handleShowPermissions(user.role)}
+                              >
+                                <Lock className="h-3 w-3" />
+                                {(rolePermissions[user.role] || []).length} صلاحية
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>اضغط لعرض الصلاحيات</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell>
+                          {user.isActive ? (
+                            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                              نشط
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="bg-slate-100 text-slate-500">
+                              غير نشط
+                            </Badge>
+                          )}
+                        </TableCell>
+                        {isAdmin && (
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleOpenEdit(user)}
+                                className="h-8 w-8 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                disabled={user.role === 'super_admin' && currentUser?.role !== 'super_admin'}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleOpenDelete(user.id)}
+                                className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                disabled={user.role === 'super_admin' || user.id === currentUser?.id}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenEdit(user)}
-                            className="h-8 w-8 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenDelete(user.id)}
-                            className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                      </TableRow>
+                    )
+                  })
                 )}
               </TableBody>
             </Table>
@@ -367,7 +438,7 @@ export default function UsersList() {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))}
-                placeholder="user@erp.com"
+                placeholder="user@ctrlerp.cloud"
                 dir="ltr"
                 className="text-left"
               />
@@ -378,17 +449,23 @@ export default function UsersList() {
               </Label>
               <Select
                 value={formData.role}
-                onValueChange={(value) => setFormData((p) => ({ ...p, role: value }))}
+                onValueChange={(value) => setFormData((p) => ({ ...p, role: value, companyRole: value }))}
               >
                 <SelectTrigger id="user-role" className="w-full">
                   <SelectValue placeholder="اختر الدور" />
                 </SelectTrigger>
                 <SelectContent>
-                  {roles.map((role) => (
-                    <SelectItem key={role} value={role}>
-                      {getRoleLabel(role)}
-                    </SelectItem>
-                  ))}
+                  {allRoles
+                    .filter(role => {
+                      // Only super_admin can create other super_admin
+                      if (role === 'super_admin' && currentUser?.role !== 'super_admin') return false
+                      return true
+                    })
+                    .map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {getRoleLabel(role)}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -423,6 +500,22 @@ export default function UsersList() {
                 />
               </div>
             )}
+
+            {/* Role permissions preview */}
+            <div className="sm:col-span-2 border rounded-lg p-3 bg-slate-50/50">
+              <p className="text-xs font-semibold text-slate-600 mb-2">صلاحيات الدور المختار:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(rolePermissions[formData.role] || []).map((perm) => (
+                  <Badge key={perm} variant="outline" className="text-[10px] py-0 px-1.5 bg-white">
+                    {perm}
+                  </Badge>
+                ))}
+                {(!rolePermissions[formData.role] || rolePermissions[formData.role].length === 0) && (
+                  <span className="text-xs text-slate-400">لا توجد صلاحيات</span>
+                )}
+              </div>
+            </div>
+
             <div className="flex items-center gap-2 sm:col-span-2 pt-2">
               <Switch
                 checked={formData.isActive}
@@ -449,6 +542,66 @@ export default function UsersList() {
         </DialogContent>
       </Dialog>
 
+      {/* Permissions Viewer Dialog */}
+      <Dialog open={permissionsDialogOpen} onOpenChange={setPermissionsDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-emerald-600" />
+              صلاحيات: {getRoleLabel(selectedRole)}
+            </DialogTitle>
+            <DialogDescription>
+              الصلاحيات الممنوحة لهذا الدور في النظام
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
+            {permissionGroups.map((group) => {
+              const rolePerms = rolePermissions[selectedRole] || []
+              const hasAny = group.permissions.some(p => rolePerms.includes(p))
+              return (
+                <div key={group.key} className="border rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-slate-700">{group.label}</span>
+                    {hasAny ? (
+                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
+                        مسموح
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs">
+                        ممنوع
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.permissions.map((perm) => {
+                      const allowed = rolePerms.includes(perm)
+                      return (
+                        <Badge
+                          key={perm}
+                          variant="outline"
+                          className={`text-[10px] py-0.5 px-1.5 ${
+                            allowed
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-50 text-slate-400 border-slate-200 line-through'
+                          }`}
+                        >
+                          {perm.split('.').pop()}
+                        </Badge>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPermissionsDialogOpen(false)}>
+              إغلاق
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
@@ -469,6 +622,6 @@ export default function UsersList() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </TooltipProvider>
   )
 }

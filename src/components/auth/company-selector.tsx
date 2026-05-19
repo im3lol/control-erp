@@ -4,9 +4,10 @@ import { useAppStore, type CompanyInfo } from '@/lib/store'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Building2, Plus, ArrowLeft, Loader2 } from 'lucide-react'
+import { Building2, Plus, ArrowLeft } from 'lucide-react'
 import { canManageCompany } from '@/lib/permissions'
 import { roleLabels } from '@/lib/permissions'
+import { signOut } from 'next-auth/react'
 
 interface CompanySelectorProps {
   onSelect: (companyId: string) => void
@@ -70,8 +71,9 @@ export default function CompanySelector({ onSelect }: CompanySelectorProps) {
           <Button
             variant="ghost"
             className="text-emerald-200 hover:text-white hover:bg-white/10 gap-2"
-            onClick={() => {
+            onClick={async () => {
               useAppStore.getState().logout()
+              await signOut({ redirect: false })
             }}
           >
             <ArrowLeft className="h-4 w-4" />

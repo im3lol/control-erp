@@ -1,9 +1,36 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 
 // Simple base64 hash for password (placeholder for real hashing)
 function hashPassword(password: string): string {
   return Buffer.from(password).toString('base64')
+}
+
+// Helper: Check if user has admin access to the company
+async function checkAdminAccess(companyId: string): Promise<{ authorized: boolean; userId?: string; role?: string }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { authorized: false }
+
+  const userId = (session.user as any).id
+  const userRole = (session.user as any).role
+
+  // super_admin can do anything
+  if (userRole === 'super_admin') {
+    return { authorized: true, userId, role: userRole }
+  }
+
+  // Check if user is admin in this company
+  const companyUser = await db.companyUser.findUnique({
+    where: { companyId_userId: { companyId, userId } },
+  })
+
+  if (companyUser && (companyUser.role === 'admin' || userRole === 'admin')) {
+    return { authorized: true, userId, role: companyUser.role }
+  }
+
+  return { authorized: false, userId, role: userRole }
 }
 
 // GET /api/settings/users - List users in a company via CompanyUser
@@ -65,10 +92,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
     }
 
+    // Check admin access
+    const access = await checkAdminAccess(companyId)
+    if (!access.authorized) {
+      return NextResponse.json(
+        { error: 'غير مصرح. فقط المديرين يمكنهم إضافة مستخدمين' },
+        { status: 403 }
+      )
+    }
+
     if (!username || !name || !password) {
       return NextResponse.json(
         { error: 'username, name, and password are required' },
         { status: 400 }
+      )
+    }
+
+    // Only super_admin can create super_admin users
+    if (role === 'super_admin' && access.role !== 'super_admin') {
+      return NextResponse.json(
+        { error: 'غير مصرح بإنشاء مستخدم بدور مدير أعلى' },
+        { status: 403 }
       )
     }
 
@@ -150,11 +194,36 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // Check admin access
+    const access = await checkAdminAccess(companyId)
+    if (!access.authorized) {
+      return NextResponse.json(
+        { error: 'غير مصرح. فقط المديرين يمكنهم تعديل المستخدمين' },
+        { status: 403 }
+      )
+    }
+
     const existing = await db.user.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
+      )
+    }
+
+    // Only super_admin can modify super_admin users
+    if (existing.role === 'super_admin' && access.role !== 'super_admin') {
+      return NextResponse.json(
+        { error: 'غير مصرح بتعديل مستخدم بدور مدير أعلى' },
+        { status: 403 }
+      )
+    }
+
+    // Only super_admin can assign super_admin role
+    if (role === 'super_admin' && access.role !== 'super_admin') {
+      return NextResponse.json(
+        { error: 'غير مصرح بتعيين دور مدير أعلى' },
+        { status: 403 }
       )
     }
 
@@ -242,11 +311,36 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    // Check admin access
+    const access = await checkAdminAccess(companyId)
+    if (!access.authorized) {
+      return NextResponse.json(
+        { error: 'غير مصرح. فقط المديرين يمكنهم حذف المستخدمين' },
+        { status: 403 }
+      )
+    }
+
     const existing = await db.user.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
+      )
+    }
+
+    // Cannot delete super_admin unless you are super_admin
+    if (existing.role === 'super_admin' && access.role !== 'super_admin') {
+      return NextResponse.json(
+        { error: 'غير مصرح بحذف مستخدم بدور مدير أعلى' },
+        { status: 403 }
+      )
+    }
+
+    // Cannot delete yourself
+    if (existing.id === access.userId) {
+      return NextResponse.json(
+        { error: 'لا يمكنك حذف حسابك الخاص' },
+        { status: 400 }
       )
     }
 

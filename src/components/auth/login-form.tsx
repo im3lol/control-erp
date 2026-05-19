@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { LayoutDashboard, Eye, EyeOff, Loader2, Building2 } from 'lucide-react'
+import { LayoutDashboard, Eye, EyeOff, Loader2 } from 'lucide-react'
 
 export default function LoginForm() {
   const [username, setUsername] = useState('')
@@ -15,7 +15,7 @@ export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { setUser, setCompanies } = useAppStore()
+  const { setUser, setCompanies, setCurrentCompany } = useAppStore()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,22 +31,27 @@ export default function LoginForm() {
       })
 
       if (result?.error) {
-        setError(result.error)
+        setError(result.error === 'CredentialsSignin' 
+          ? 'اسم المستخدم أو كلمة المرور غير صحيحة' 
+          : result.error)
         setLoading(false)
         return
       }
 
       if (result?.ok) {
+        // Wait a moment for session to be fully established
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
         // Fetch session to get user info
         const sessionRes = await fetch('/api/auth/session')
         const session = await sessionRes.json()
 
         if (session?.user) {
           const userData = {
-            id: session.user.id,
+            id: (session.user as any).id || '',
             name: session.user.name || '',
-            username: session.user.username || '',
-            role: session.user.role || 'viewer',
+            username: (session.user as any).username || '',
+            role: (session.user as any).role || 'viewer',
             email: session.user.email || undefined,
           }
           setUser(userData)
@@ -57,10 +62,17 @@ export default function LoginForm() {
             if (companiesRes.ok) {
               const companiesData = await companiesRes.json()
               setCompanies(companiesData)
+              
+              // Auto-select if only one company
+              if (companiesData.length === 1) {
+                setCurrentCompany(companiesData[0].id)
+              }
             }
           } catch (err) {
             console.error('Failed to fetch companies:', err)
           }
+        } else {
+          setError('فشل في استرجاع بيانات الجلسة. يرجى المحاولة مرة أخرى')
         }
       }
     } catch (err) {
@@ -77,7 +89,6 @@ export default function LoginForm() {
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-600/20 rounded-full blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-500/15 rounded-full blur-3xl" />
         <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-emerald-400/10 rounded-full blur-2xl" />
-        {/* Geometric pattern */}
         <svg className="absolute inset-0 w-full h-full opacity-[0.03]" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -97,7 +108,7 @@ export default function LoginForm() {
             </div>
           </div>
           <h1 className="text-2xl font-bold text-slate-900">تسجيل الدخول</h1>
-          <p className="text-slate-500 mt-1 text-sm">نظام ERP المتكامل</p>
+          <p className="text-slate-500 mt-1 text-sm">Control ERP - نظام كنترول</p>
         </CardHeader>
 
         <CardContent className="px-8 pb-8 pt-4">
@@ -128,7 +139,7 @@ export default function LoginForm() {
                   required
                 />
                 <div className="absolute start-3 top-1/2 -translate-y-1/2">
-                  <Building2 className="h-4 w-4 text-slate-400" />
+                  <LayoutDashboard className="h-4 w-4 text-slate-400" />
                 </div>
               </div>
             </div>
@@ -181,9 +192,8 @@ export default function LoginForm() {
               )}
             </Button>
 
-            {/* Demo credentials hint */}
+            {/* Credentials hint */}
             <div className="mt-6 pt-4 border-t border-slate-100">
-              <p className="text-xs text-slate-400 text-center mb-2">بيانات التجربة</p>
               <div className="flex items-center justify-center gap-4 text-xs text-slate-500">
                 <span className="bg-slate-50 px-2.5 py-1 rounded-lg font-mono">admin</span>
                 <span>/</span>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, type ElementType } from 'react'
+import { useState, useEffect, useCallback, type ElementType } from 'react'
 import { SessionProvider, useSession, signOut } from 'next-auth/react'
 import { useAppStore } from '@/lib/store'
 import type { Module } from '@/lib/store'
@@ -439,7 +439,7 @@ function DashboardContent() {
             <LayoutDashboard className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold">مرحباً بك في نظام ERP</h2>
+            <h2 className="text-2xl font-bold">مرحباً بك في Control ERP</h2>
             <p className="text-emerald-100 mt-0.5">
               إليك ملخص أعمالك اليوم
             </p>
@@ -605,13 +605,11 @@ function AppContent() {
   const { data: session, status } = useSession()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
   const [mobileOpen, setMobileOpen] = useState(false)
-  const sessionProcessedRef = useRef(false)
+  const [setupWizardOpen, setSetupWizardOpen] = useState(false)
 
-  // ── Sync session with store on mount ──
+  // ── Sync session with store ──
   useEffect(() => {
     if (status === 'loading') return
-    if (sessionProcessedRef.current) return
-    sessionProcessedRef.current = true
 
     if (session?.user && !isAuthenticated) {
       const userData = {
@@ -635,7 +633,7 @@ function AppContent() {
           }
         })
         .catch(console.error)
-    } else if (!session && isAuthenticated) {
+    } else if (!session && isAuthenticated && status !== 'loading') {
       // Session expired but store thinks we're logged in
       logout()
     }
@@ -842,7 +840,7 @@ function AppContent() {
                 <LayoutDashboard className="h-4 w-4 text-white" />
               </div>
               <span className="font-bold text-emerald-700 text-lg">
-                نظام ERP
+                Control
               </span>
             </div>
             <ScrollArea className="h-[calc(100dvh-3.5rem)]">
@@ -950,7 +948,7 @@ function AppContent() {
                   <LayoutDashboard className="h-4 w-4 text-white" />
                 </div>
                 <span className="font-bold text-emerald-700 text-lg">
-                  نظام ERP
+                  Control
                 </span>
               </div>
             ) : (

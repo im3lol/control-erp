@@ -52,10 +52,11 @@ export function getStatusLabel(status: string): string {
 // Role Arabic labels
 export function getRoleLabel(role: string): string {
   const labels: Record<string, string> = {
+    super_admin: 'مدير أعلى',
     admin: 'مدير',
     accountant: 'محاسب',
     sales: 'بائع',
-    purchase: 'مستلم مشتريات',
+    purchase: 'مسؤول مشتريات',
     inventory: 'أمين مخزن',
     viewer: 'مشاهد',
   }
