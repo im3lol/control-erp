@@ -5,7 +5,7 @@ type SettingsView = 'company' | 'currencies' | 'uom' | 'users' | 'chart-of-accou
 type InventoryView = 'warehouses' | 'items' | 'categories' | 'stock-movements' | 'item-balances'
 type AccountingView = 'journal-entries' | 'chart-of-accounts'
 type SalesView = 'customers' | 'sales-invoices' | 'receipt-vouchers'
-type PurchasesView = 'suppliers' | 'purchase-invoices' | 'payment-vouchers'
+type PurchasesView = 'suppliers' | 'purchase-invoices' | 'purchase-orders' | 'supplier-form' | 'purchase-order-form' | 'purchase-invoice-form'
 type ReportsView = 'trial-balance' | 'balance-sheet' | 'income-statement' | 'inventory-report' | 'sales-report' | 'purchase-report' | 'customer-aging' | 'supplier-aging'
 type InvestorsView = 'investors-list'
 
@@ -85,6 +85,8 @@ interface AppState {
   selectedItemId: string | null
   // Selected transfer for detail page navigation
   selectedTransferId: string | null
+  // Document ID for editing (used by form pages)
+  editingDocId: string | null
   // Navigation actions
   setModule: (module: Module) => void
   setView: (view: string) => void
@@ -101,6 +103,7 @@ interface AppState {
   setItemFilter: (filter: string | null) => void
   setSelectedItemId: (id: string | null) => void
   setSelectedTransferId: (id: string | null) => void
+  setEditingDocId: (id: string | null) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -117,6 +120,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   itemFilter: null,
   selectedItemId: null,
   selectedTransferId: null,
+  editingDocId: null,
   // Navigation actions
   setModule: (module) => set({ currentModule: module, currentView: '' }),
   setView: (view) => set({ currentView: view }),
@@ -125,6 +129,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setItemFilter: (filter) => set({ itemFilter: filter }),
   setSelectedItemId: (id) => set({ selectedItemId: id }),
   setSelectedTransferId: (id) => set({ selectedTransferId: id }),
+  setEditingDocId: (id) => set({ editingDocId: id }),
   // Auth & company actions
   setUser: (user) => {
     set({ user, isAuthenticated: true })

@@ -531,3 +531,30 @@ Work Log:
 - All text in Arabic
 - Lint passes cleanly
 - Dev server running successfully
+---
+Task ID: 1
+Agent: Main Agent
+Task: Convert Purchases module (Suppliers, Purchase Orders, Purchase Invoices) from popup dialogs to full pages, add Save/Submit workflow, remove سندات الصرف
+
+Work Log:
+- Updated page.tsx: Removed PaymentVouchersList import and render, added SupplierFormPage, PurchaseOrderFormPage, PurchaseInvoiceFormPage imports and rendering
+- Removed سندات الصرف from Purchases navigation children
+- Added view titles for supplier-form, purchase-order-form, purchase-invoice-form
+- Added editingDocId field to Zustand store for passing document IDs between list and form pages
+- Created SupplierFormPage: Full-page form with Save button, edit support via editingDocId
+- Created PurchaseOrderFormPage: Full-page form with Save (حفظ كمسودة) and Submit (تأكيد) buttons, status badges, editable when DRAFT, read-only when confirmed
+- Created PurchaseInvoiceFormPage: Same pattern as PO form page with Save/Submit workflow
+- Updated SuppliersList: Removed dialog, navigates to supplier-form page on add/edit
+- Updated PurchaseOrdersList: Removed creation dialog, navigates to purchase-order-form page, kept detail and confirm dialogs
+- Updated PurchaseInvoicesList: Removed creation dialog, navigates to purchase-invoice-form page, kept detail and confirm dialogs
+- Updated store.ts PurchasesView type to include new view IDs
+- All labels in Arabic as requested
+- Lint passes cleanly
+
+Stage Summary:
+- Purchases module now uses full pages instead of popup dialogs
+- Save button creates DRAFT, Submit (تأكيد) button confirms the document
+- سندات الصرف removed from المشتريات sidebar
+- Three new form page components created: supplier-form-page, purchase-order-form-page, purchase-invoice-form-page
+- Three list components updated to navigate to form pages instead of using dialogs
+- editingDocId added to store for document ID passing between views

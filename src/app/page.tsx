@@ -96,7 +96,9 @@ import InventoryDashboard from '@/components/inventory/inventory-dashboard'
 import PickListsList from '@/components/inventory/pick-lists-list'
 import SuppliersList from '@/components/purchases/suppliers-list'
 import PurchaseInvoicesList from '@/components/purchases/purchase-invoices-list'
-import PaymentVouchersList from '@/components/purchases/payment-vouchers-list'
+import SupplierFormPage from '@/components/purchases/supplier-form-page'
+import PurchaseOrderFormPage from '@/components/purchases/purchase-order-form-page'
+import PurchaseInvoiceFormPage from '@/components/purchases/purchase-invoice-form-page'
 import PurchaseOrdersList from '@/components/purchases/purchase-orders-list'
 import CustomersList from '@/components/sales/customers-list'
 import SalesInvoicesList from '@/components/sales/sales-invoices-list'
@@ -187,7 +189,6 @@ const navigation: NavItem[] = [
       { id: 'suppliers', label: 'الموردين', icon: Building2 },
       { id: 'purchase-orders', label: 'أوامر الشراء', icon: ClipboardList },
       { id: 'purchase-invoices', label: 'فواتير الشراء', icon: FileText },
-      { id: 'payment-vouchers', label: 'سندات الصرف', icon: CreditCard },
     ],
   },
   {
@@ -294,7 +295,9 @@ const viewTitles: Record<string, string> = {
   suppliers: 'الموردين',
   'purchase-orders': 'أوامر الشراء',
   'purchase-invoices': 'فواتير الشراء',
-  'payment-vouchers': 'سندات الصرف',
+  'supplier-form': 'إضافة مورد',
+  'purchase-order-form': 'أمر شراء جديد',
+  'purchase-invoice-form': 'فاتورة شراء جديدة',
   'trial-balance': 'ميزان المراجعة',
   'balance-sheet': 'الميزانية العمومية',
   'income-statement': 'قائمة الدخل',
@@ -946,12 +949,16 @@ function AppContent() {
       switch (currentView) {
         case 'suppliers':
           return <SuppliersList />
+        case 'supplier-form':
+          return <SupplierFormPage />
         case 'purchase-orders':
           return <PurchaseOrdersList />
+        case 'purchase-order-form':
+          return <PurchaseOrderFormPage />
         case 'purchase-invoices':
           return <PurchaseInvoicesList />
-        case 'payment-vouchers':
-          return <PaymentVouchersList />
+        case 'purchase-invoice-form':
+          return <PurchaseInvoiceFormPage />
         default:
           return <ModulePlaceholder title={currentTitle} />
       }
