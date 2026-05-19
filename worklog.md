@@ -254,3 +254,280 @@ Work Log:
   - Loading skeleton state, Empty state with ClipboardCheck icon
   - RTL layout, Arabic labels, useAppStore for companyId, formatDate from erp-utils, toast from sonner
 - Lint passes cleanly
+
+---
+Task ID: 3
+Agent: API Agent
+Task: Create API routes for Purchase Orders (أمر شراء) feature
+
+Work Log:
+- Created `src/app/api/purchases/orders/route.ts` - GET list and POST create
+  - GET: Returns all purchase orders for a companyId with supplier, warehouse, _count.lines
+  - Supports filters: status, supplierId, fromDate, toDate, itemId
+  - Ordered by date desc, createdAt desc
+  - Require permission: purchases.view
+  - POST: Creates a new purchase order with lines
+  - Require permission: purchases.create
+  - Validates required fields: companyId, supplierId, warehouseId, lines (at least 1)
+  - Validates supplier and warehouse exist and belong to company
+  - Calculates totals: rawSubtotal (sum of qty*unitPrice), totalLineDiscounts, totalLineTaxes, invoiceDiscount, invoiceTax, totalAmount
+  - Auto-generates number: PO-{year}-{seq} using generateDocNumber
+  - Creates with status DRAFT
+  - Returns created order with supplier, warehouse, lines.item
+- Created `src/app/api/purchases/orders/[id]/route.ts` - GET single and PUT actions
+  - GET: Returns single purchase order with all relations (supplier, warehouse, lines with item+uom, purchaseReceipts)
+  - Require permission: purchases.view
+  - Company ownership validation
+  - PUT supports four actions via body `{ companyId, action }`:
+    - "update" → Update DRAFT order fields and lines (delete old lines, create new)
+      - Require permission: purchases.edit
+      - Only allowed when status is DRAFT
+      - Recalculates all totals when lines change
+      - Supports partial updates (without changing lines)
+    - "confirm" → DRAFT to CONFIRMED
+      - Require permission: purchases.confirm
+      - Simple status update, no stock movements or journal entries (those happen on Purchase Receipt/Invoice)
+    - "cancel" → Change status to CANCELLED (if DRAFT or CONFIRMED)
+      - Require permission: purchases.edit
+      - Prevents cancelling already-cancelled or CLOSED orders
+    - "close" → Change status to CLOSED (when fully received)
+      - Require permission: purchases.edit
+      - Only allowed when status is CONFIRMED
+      - Validates all lines have receivedQty >= quantity before closing
+  - All actions validate current status before transitioning
+  - Company ownership validation on all operations
+- Followed existing purchase invoices API patterns: requirePermission, generateDocNumber, companyId filtering, error handling, Arabic error messages
+- Lint passes cleanly
+
+---
+Task ID: 4
+Agent: API Agent
+Task: Create Sales Orders API routes (أوامر البيع)
+
+Work Log:
+- Created `src/app/api/sales/orders/route.ts` - GET list and POST create
+  - GET: Returns all sales orders for a companyId with customer info and _count.lines
+  - Query params supported: companyId (required), status, customerId, fromDate, toDate, itemId
+  - Filters: status, customerId, date range, lines by itemId
+  - Ordered by date desc, createdAt desc
+  - POST: Creates a new sales order with lines
+  - Auto-generates number: SO-{year}-{seq} using generateDocNumber
+  - Creates with status DRAFT
+  - Validates: companyId, customerId (exists and belongs to company), lines (at least one, itemId/quantity/unitPrice required)
+  - Calculates: subtotal (sum of qty*unitPrice - discount per line), taxAmount (from taxPercent on subtotal), totalAmount (subtotal - discount + tax)
+  - Per-line totalAmount: qty * unitPrice - discount + tax
+  - Returns created order with customer and lines.item relations
+- Created `src/app/api/sales/orders/[id]/route.ts` - GET single and PUT actions
+  - GET: Returns single sales order with full relations (customer, lines with item + UOM, deliveryNotes)
+  - PUT supports four actions via body `{ companyId, action }`:
+    - "confirm" → DRAFT to CONFIRMED:
+      - Validates current status is DRAFT
+      - Simple status change (no stock movements - orders are not stock documents)
+      - Requires `sales.edit` permission
+    - "cancel" → DRAFT/CONFIRMED to CANCELLED:
+      - Validates current status is DRAFT or CONFIRMED
+      - Simple status change (no stock reversal needed since confirm doesn't move stock)
+      - Requires `sales.edit` permission
+    - "close" → CONFIRMED to CLOSED:
+      - Validates current status is CONFIRMED
+      - Checks all lines are fully delivered (deliveredQty >= quantity)
+      - Returns Arabic error if not all items delivered
+      - Requires `sales.edit` permission
+    - "update" → Update DRAFT order fields and lines:
+      - Only allowed when status is DRAFT
+      - Updates: customerId, date, dueDate, discountAmount, discountPercent, taxPercent, notes, lines
+      - If lines provided: deletes old lines, creates new ones
+      - Recalculates subtotal, taxAmount, totalAmount
+      - Requires `sales.edit` permission
+  - All actions validate company ownership
+  - Error handling with Arabic messages, 403 for auth errors, proper HTTP status codes
+- Followed exact same pattern as sales invoices API: requirePermission, generateDocNumber, companyId filtering, error handling, Arabic error messages
+- Lint passes cleanly
+
+---
+Task ID: 6
+Agent: UI Agent
+Task: Create Sales Orders (أوامر البيع) UI component
+
+Work Log:
+- Created `src/components/sales/sales-orders-list.tsx` following the exact same pattern as sales-invoices-list.tsx
+- Component features:
+  - Header with FileText icon and title "أوامر البيع" + "أمر بيع جديد" button
+  - Table with 7 columns: الرقم, العميل, التاريخ, الإجمالي, المسلم, الحالة, إجراءات
+  - Status badges with Arabic labels and color coding (using getOrderStatusColor/getOrderStatusLabel helpers for CLOSED):
+    - DRAFT → "مسودة" (yellow), CONFIRMED → "مؤكدة" (blue), CANCELLED → "ملغية" (red), CLOSED → "مغلق" (teal)
+  - "المسلم" (delivered) column shows progress bar with percentage of delivered vs ordered quantities
+  - Filters: status (DRAFT/CONFIRMED/CANCELLED/CLOSED), customer, date range, item filter from store
+  - New/Edit Order Sheet (side="left") with:
+    - Header: customer select, date, due date, notes
+    - Lines: item, quantity, unit price, discount, line total, remove button
+    - Footer: discount amount, tax percent, totals summary (subtotal, discount, tax, total)
+    - "حفظ كمسودة" (save as draft) button
+  - Detail Dialog showing:
+    - Customer info + date + due date
+    - Notes section
+    - Lines table with: item name/code, quantity, delivered qty (with remaining/complete badges), unit price, discount, total
+    - Totals summary
+    - Linked Delivery Notes table (number, date, line count, status)
+    - "إنشاء إذن صرف" button for CONFIRMED orders
+  - Workflow Actions:
+    - DRAFT: Confirm (CheckCircle2), Edit (Pencil), Cancel (XCircle)
+    - CONFIRMED: View details (Eye), Create Delivery Note (Truck), Cancel (XCircle)
+    - CLOSED/CANCELLED: View details (Eye)
+  - Confirm AlertDialog with Arabic message about creating delivery notes after confirmation
+  - Cancel AlertDialog with Arabic message
+  - "Create Delivery Note" button on CONFIRMED orders:
+    - Stores order data in localStorage under key `pendingDeliveryNote` (includes salesOrderId, customer, lines with remaining qty)
+    - Navigates to inventory > delivery-notes via `useAppStore.getState().setModule('inventory')` and `setView('delivery-notes')`
+  - Delivered qty tracking: progress bar in list view, per-line delivered/remaining in detail dialog
+  - Loading skeleton state, Empty state with FileText icon
+  - RTL layout, Arabic labels, useAppStore for companyId, formatCurrency/formatDate/getStatusColor/getStatusLabel from erp-utils, toast from sonner
+  - Emerald color scheme for primary actions
+  - API endpoints: `/api/sales/orders?companyId=X`, `/api/sales/orders/[id]?companyId=X`
+- Lint passes cleanly
+
+---
+Task ID: 5
+Agent: UI Agent
+Task: Create Purchase Orders (أوامر الشراء) UI component
+
+Work Log:
+- Created `src/components/purchases/purchase-orders-list.tsx` following the exact same pattern as purchase-invoices-list.tsx
+- Component features:
+  - Header with FileText icon and title "أوامر الشراء" + "أمر شراء جديد" button
+  - Table with 8 columns: رقم, المورد, المخزن, التاريخ, الإجمالي, المستلم, الحالة, إجراءات
+  - "المستلم" column shows received status: "مكتمل" (teal) for CLOSED, "قيد الاستلام" (amber) for CONFIRMED, "—" for DRAFT/CANCELLED
+  - Status badges with Arabic labels and color coding:
+    - DRAFT → "مسودة" (yellow), CONFIRMED → "مؤكدة" (blue), CANCELLED → "ملغية" (red), CLOSED → "مغلق" (teal)
+    - Extended `getOrderStatusColor` and `getOrderStatusLabel` locally for CLOSED status
+  - Filters: status (DRAFT/CONFIRMED/CANCELLED/CLOSED), supplier, date range
+  - New Order Dialog: supplier select, warehouse select, date, notes, dynamic lines (item/qty/unitPrice/discount/tax), invoice-level discount/tax percent, totals summary, save as draft button
+  - Detail Dialog: header info grid (number/supplier/warehouse/date/status), lines table with received qty tracking columns (الكمية/المستلم/المتبقي/سعر الوحدة/الخصم/الضريبة/الإجمالي), totals section, linked purchase receipts list, notes
+  - Received qty tracking in detail dialog: shows received vs ordered per line, remaining quantity in red if >0, green checkmark if fully received
+  - Linked Purchase Receipts section: lists all PRs linked to the order with number, date, and status badge
+  - Workflow Actions:
+    - DRAFT: Confirm (→ CONFIRMED) + Cancel (→ CANCELLED)
+    - CONFIRMED: Create Purchase Receipt button (PackageCheck icon) + Cancel (→ CANCELLED)
+    - "Create Purchase Receipt" stores order data in localStorage under key `pendingPurchaseReceipt`, then navigates to inventory > purchase-receipts via `setModule('inventory')` + `setView('purchase-receipts')`
+    - Full order details are fetched before storing in localStorage to ensure complete line data
+  - Confirm/Cancel Dialog with contextual messages (confirm mentions PR creation capability)
+  - Loading skeleton state, Empty state with FileText icon
+  - RTL layout, Arabic labels, useAppStore for companyId, formatDate/formatCurrency from erp-utils, toast from sonner
+  - API endpoints: `/api/purchases/orders?companyId=X` (GET/POST), `/api/purchases/orders/[id]?companyId=X` (GET/PUT)
+- Lint passes cleanly
+
+---
+Task ID: 8
+Agent: UI Agent
+Task: Update Delivery Note component to support receiving Sales Order data
+
+Work Log:
+- Updated `src/app/api/inventory/delivery-notes/route.ts`:
+  - GET: Added `salesOrder` include (select: id, number) to list query
+  - POST: Added `salesOrderId` destructuring from body; added salesOrderId validation block that fetches the sales order, validates company ownership, and auto-fills customerId if not already set by salesInvoiceId; added `salesOrderId: salesOrderId || null` to create data; added `salesOrder` include in response
+- Updated `src/app/api/inventory/delivery-notes/[id]/route.ts`:
+  - GET: Added `salesOrder` include (select: id, number) to single query
+  - PUT: Added `salesOrder` include (select: id, number) to all update responses (confirm, cancel CONFIRMED, cancel DRAFT)
+- Updated `src/components/inventory/delivery-notes-list.tsx` with all 8 requirements:
+  1. localStorage support: Added useEffect on mount that checks `pendingDeliveryNote` in localStorage, parses JSON, pre-fills create form (warehouseId empty, salesOrderId from order, customerId from order, lines with remaining qty), opens create dialog automatically, clears localStorage key
+  2. salesOrderId in createForm state: Added `salesOrderId: ''` to createForm initial state
+  3. Sales Order dropdown in create dialog: Added new Select field for choosing a Sales Order, shows only CONFIRMED orders, when selected fetches order details from `/api/sales/orders/[id]?companyId=X`, auto-fills customerId and lines (quantity = ordered - delivered), sets salesOrderId, "بدون أمر بيع" option; mutually exclusive with Sales Invoice selection
+  4. salesOrderId in POST body: Added `salesOrderId: createForm.salesOrderId || undefined` to create request body
+  5. Linked Sales Order in view dialog: Added "أمر البيع" field showing `selectedNote.salesOrder?.number || '—'`
+  6. Updated DeliveryNote type: Added `salesOrderId: string | null` and `salesOrder?: { id: string; number: string }`
+  7. fetchSalesOrders function: Added `fetchSalesOrders` useCallback that fetches from `/api/sales/orders?companyId=X&status=CONFIRMED`
+  8. Table column: Added "أمر البيع" column showing `note.salesOrder?.number || '—'` between "فاتورة البيع" and "عدد الأصناف"
+- Additional changes:
+  - Added `SalesOrder` and `SalesOrderLine` interfaces
+  - Added `salesOrders` state and `orderLoading` state
+  - Added `handleSalesOrderChange` async handler (mirrors handleSalesInvoiceChange pattern)
+  - Updated customer select to be disabled when salesOrderId is set (in addition to salesInvoiceId)
+  - Updated line editing disabled conditions to include salesOrderId
+  - Updated auto-fill messages from "من الفاتورة" to "من المستند المحدد"
+  - Sales Invoice select is disabled when Sales Order is selected, and vice versa
+  - Create button disabled condition includes orderLoading
+  - Table colSpan updated from 8 to 9 for empty state
+- Lint passes cleanly
+
+---
+Task ID: 7
+Agent: UI Agent
+Task: Update Purchase Receipt component to support receiving Purchase Order data
+
+Work Log:
+- Updated `src/components/inventory/purchase-receipts-list.tsx`:
+  - Added `purchaseOrderId` and `purchaseOrder` to PurchaseReceipt interface
+  - Added `PurchaseOrder` interface for the purchase orders dropdown
+  - Added `purchaseOrderId` to `createForm` state object
+  - Added `purchaseOrders` state array and `fetchPurchaseOrders` function (fetches CONFIRMED orders from `/api/purchases/orders?companyId=X&status=CONFIRMED`)
+  - Added useEffect to check `localStorage.getItem('pendingPurchaseReceipt')` on mount:
+    - Parses JSON data from Purchase Orders component
+    - Pre-fills warehouseId, supplierId, purchaseOrderId from the order
+    - Pre-fills lines with remaining qty (ordered - received) per line
+    - Opens create dialog automatically
+    - Clears localStorage key after reading
+  - Added `handlePurchaseOrderChange` function that:
+    - Fetches order details from `/api/purchases/orders/[id]?companyId=X`
+    - Auto-fills supplierId and warehouseId from the order
+    - Pre-populates lines with remaining qty (quantity - receivedQty)
+    - Shows info toast if all items already fully received
+  - Added "أمر الشراء" Select dropdown in create dialog (between Warehouse and Purchase Invoice)
+  - Updated supplier disabled state to also disable when purchaseOrderId is set
+  - Updated line add/remove/edit disabled states to also respect purchaseOrderId
+  - Updated auto-fill hint text to show "أمر الشراء" or "الفاتورة" contextually
+  - Added `purchaseOrderId` in the POST body when creating a purchase receipt
+  - Added "أمر الشراء" column in the main table showing linked order number
+  - Added "أمر الشراء" field in the view/detail dialog showing linked order number
+  - Updated colSpan from 8 to 9 for empty state row
+- Updated `src/app/api/inventory/purchase-receipts/route.ts`:
+  - GET: Added `purchaseOrder` include (select: id, number) in list query
+  - POST: Added `purchaseOrderId` destructuring from body
+  - POST: Added purchase order validation - validates order exists and belongs to company
+  - POST: Auto-fills supplierId and warehouseId from purchase order
+  - POST: Validates items belong to the purchase order
+  - POST: Saves `purchaseOrderId` in the created receipt
+  - POST: Added `purchaseOrder` include in the returned receipt
+  - POST: Added receivedQty increment on purchase order lines after creating receipt
+- Updated `src/app/api/inventory/purchase-receipts/[id]/route.ts`:
+  - GET: Added `purchaseOrder` include in single receipt query
+  - PUT confirm: Added `purchaseOrder` include in returned data
+  - PUT cancel (confirmed): Added `purchaseOrder` include in returned data
+  - PUT cancel (draft): Added `purchaseOrder` include in returned data
+- Lint passes cleanly
+- Dev server running successfully
+
+---
+Task ID: 12
+Agent: Workflow Agent
+Task: Add workflow buttons to navigate from confirmed receipts/notes to invoice creation
+
+Work Log:
+- Updated `src/components/inventory/purchase-receipts-list.tsx`:
+  - Added `FileText` to lucide-react imports
+  - In the view/detail dialog's DialogFooter, when `selectedReceipt.status === 'CONFIRMED'`, added "إنشاء فاتورة شراء" (Create Purchase Invoice) button with amber styling
+  - Button stores receipt data in localStorage under key `pendingPurchaseInvoice` with: id, number, supplierId, warehouseId, lines (itemId, quantity)
+  - Navigates to purchases > purchase-invoices using `useAppStore.getState().setModule('purchases')` and `useAppStore.getState().setView('purchase-invoices')`
+  - Wrapped the CONFIRMED section in a Fragment (<>...</>) to accommodate both the new workflow button and the existing cancel button
+
+- Updated `src/components/purchases/purchase-invoices-list.tsx`:
+  - Added useEffect on mount that checks localStorage for `pendingPurchaseInvoice`
+  - If found: parses data, removes localStorage key
+  - Pre-fills the new invoice form with: supplierId, warehouseId, notes mentioning receipt number, lines from receipt items
+  - Opens the new invoice dialog automatically
+
+- Updated `src/components/inventory/delivery-notes-list.tsx`:
+  - Added `FileText` to lucide-react imports
+  - In the view/detail dialog's DialogFooter, when `selectedNote.status === 'CONFIRMED'`, added "إنشاء فاتورة بيع" (Create Sales Invoice) button with amber styling
+  - Button stores note data in localStorage under key `pendingSalesInvoice` with: id, number, customerId, lines (itemId, quantity)
+  - Navigates to sales > sales-invoices using `useAppStore.getState().setModule('sales')` and `useAppStore.getState().setView('sales-invoices')`
+  - Wrapped the CONFIRMED section in a Fragment (<>...</>) to accommodate both the new workflow button and the existing cancel button
+
+- Updated `src/components/sales/sales-invoices-list.tsx`:
+  - Added useEffect on mount that checks localStorage for `pendingSalesInvoice`
+  - If found: parses data, removes localStorage key
+  - Pre-fills the new invoice form with: customerId, notes mentioning delivery note number, lines from note items
+  - Opens the new invoice sheet automatically
+
+- All text in Arabic
+- Lint passes cleanly
+- Dev server running successfully

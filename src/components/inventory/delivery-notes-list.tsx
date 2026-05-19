@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   Trash2,
+  FileText,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -106,12 +107,32 @@ interface DeliveryNoteLine {
   item?: { id: string; code: string; nameAr?: string; nameEn?: string; uom?: { nameAr: string } | null }
 }
 
+interface SalesOrder {
+  id: string
+  number: string
+  customerId: string
+  status: string
+  date: string
+  customer?: { id: string; code: string; nameAr: string; nameEn?: string }
+  lines?: SalesOrderLine[]
+}
+
+interface SalesOrderLine {
+  id: string
+  itemId: string
+  quantity: number
+  deliveredQty?: number
+  unitPrice: number
+  item?: { id: string; code: string; nameAr?: string; nameEn?: string }
+}
+
 interface DeliveryNote {
   id: string
   number: string
   date: string
   status: string
   salesInvoiceId: string | null
+  salesOrderId: string | null
   customerId: string | null
   warehouseId: string
   notes: string | null
@@ -119,6 +140,7 @@ interface DeliveryNote {
   customer?: { id: string; code: string; nameAr: string; nameEn?: string }
   warehouse?: { id: string; code: string; nameAr: string; nameEn?: string }
   salesInvoice?: { id: string; number: string }
+  salesOrder?: { id: string; number: string }
   _count?: { lines: number }
   lines?: DeliveryNoteLine[]
 }
@@ -170,6 +192,7 @@ export default function DeliveryNotesList() {
   const [items, setItems] = useState<Item[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [salesInvoices, setSalesInvoices] = useState<SalesInvoice[]>([])
+  const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
@@ -178,12 +201,14 @@ export default function DeliveryNotesList() {
   const [createForm, setCreateForm] = useState({
     warehouseId: '',
     salesInvoiceId: '',
+    salesOrderId: '',
     customerId: '',
     date: new Date().toISOString().split('T')[0],
     notes: '',
   })
   const [createLines, setCreateLines] = useState<DeliveryNoteLineInput[]>([{ ...initialLineInput }])
   const [invoiceLoading, setInvoiceLoading] = useState(false)
+  const [orderLoading, setOrderLoading] = useState(false)
 
   // View dialog
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
@@ -257,6 +282,18 @@ export default function DeliveryNotesList() {
     }
   }, [companyId])
 
+  const fetchSalesOrders = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/sales/orders?companyId=${companyId}&status=CONFIRMED`)
+      if (res.ok) {
+        const data = await res.json()
+        setSalesOrders(data)
+      }
+    } catch {
+      // silently fail
+    }
+  }, [companyId])
+
   useEffect(() => {
     if (companyId) {
       fetchDeliveryNotes()
@@ -264,8 +301,46 @@ export default function DeliveryNotesList() {
       fetchItems()
       fetchCustomers()
       fetchSalesInvoices()
+      fetchSalesOrders()
     }
-  }, [companyId, fetchDeliveryNotes, fetchWarehouses, fetchItems, fetchCustomers, fetchSalesInvoices])
+  }, [companyId, fetchDeliveryNotes, fetchWarehouses, fetchItems, fetchCustomers, fetchSalesInvoices, fetchSalesOrders])
+
+  // ── localStorage: Check for pending delivery note from Sales Order ──
+  useEffect(() => {
+    try {
+      const pending = localStorage.getItem('pendingDeliveryNote')
+      if (pending) {
+        const data = JSON.parse(pending)
+        localStorage.removeItem('pendingDeliveryNote')
+
+        setCreateForm({
+          warehouseId: '', // leave empty for user to select
+          salesInvoiceId: '',
+          salesOrderId: data.salesOrderId || '',
+          customerId: data.customerId || '',
+          date: new Date().toISOString().split('T')[0],
+          notes: '',
+        })
+
+        if (data.lines && data.lines.length > 0) {
+          const orderLines: DeliveryNoteLineInput[] = data.lines
+            .filter((l: { quantity: number }) => l.quantity > 0)
+            .map((l: { itemId: string; quantity: number }) => ({
+              itemId: l.itemId,
+              quantity: l.quantity,
+              notes: '',
+            }))
+          if (orderLines.length > 0) {
+            setCreateLines(orderLines)
+          }
+        }
+
+        setCreateDialogOpen(true)
+      }
+    } catch {
+      // silently fail
+    }
+  }, [])
 
   // ── Warehouse Display Name ────────────────────────────────────────────────
 
@@ -287,13 +362,13 @@ export default function DeliveryNotesList() {
   // ── Sales Invoice Auto-fill ──────────────────────────────────────────────
 
   const handleSalesInvoiceChange = async (invoiceId: string) => {
-    if (!invoiceId) {
+    if (!invoiceId || invoiceId === '__none__') {
       setCreateForm((p) => ({ ...p, salesInvoiceId: '', customerId: '' }))
       setCreateLines([{ ...initialLineInput }])
       return
     }
 
-    setCreateForm((p) => ({ ...p, salesInvoiceId: invoiceId }))
+    setCreateForm((p) => ({ ...p, salesInvoiceId: invoiceId, salesOrderId: '' }))
     setInvoiceLoading(true)
 
     try {
@@ -322,12 +397,58 @@ export default function DeliveryNotesList() {
     }
   }
 
+  // ── Sales Order Auto-fill ──────────────────────────────────────────────
+
+  const handleSalesOrderChange = async (orderId: string) => {
+    if (!orderId || orderId === '__none__') {
+      setCreateForm((p) => ({ ...p, salesOrderId: '', customerId: '' }))
+      setCreateLines([{ ...initialLineInput }])
+      return
+    }
+
+    setCreateForm((p) => ({ ...p, salesOrderId: orderId, salesInvoiceId: '' }))
+    setOrderLoading(true)
+
+    try {
+      const res = await fetch(`/api/sales/orders/${orderId}?companyId=${companyId}`)
+      if (res.ok) {
+        const order: SalesOrder = await res.json()
+        // Auto-fill customerId from the order
+        setCreateForm((p) => ({ ...p, customerId: order.customerId }))
+
+        // Pre-populate lines from order items with remaining qty
+        if (order.lines && order.lines.length > 0) {
+          const orderLines: DeliveryNoteLineInput[] = order.lines
+            .filter((l) => (l.quantity - (l.deliveredQty || 0)) > 0)
+            .map((l) => ({
+              itemId: l.itemId,
+              quantity: l.quantity - (l.deliveredQty || 0),
+              notes: '',
+            }))
+          if (orderLines.length > 0) {
+            setCreateLines(orderLines)
+          } else {
+            toast.info('جميع أصناف أمر البيع تم تسليمها بالفعل')
+            setCreateLines([{ ...initialLineInput }])
+          }
+        }
+      } else {
+        toast.error('فشل في تحميل تفاصيل أمر البيع')
+      }
+    } catch {
+      toast.error('حدث خطأ أثناء تحميل أمر البيع')
+    } finally {
+      setOrderLoading(false)
+    }
+  }
+
   // ── Create Delivery Note Handlers ────────────────────────────────────────
 
   const handleOpenCreate = () => {
     setCreateForm({
       warehouseId: '',
       salesInvoiceId: '',
+      salesOrderId: '',
       customerId: '',
       date: new Date().toISOString().split('T')[0],
       notes: '',
@@ -375,6 +496,7 @@ export default function DeliveryNotesList() {
           companyId,
           warehouseId: createForm.warehouseId,
           salesInvoiceId: createForm.salesInvoiceId || undefined,
+          salesOrderId: createForm.salesOrderId || undefined,
           customerId: createForm.customerId || undefined,
           date: createForm.date,
           notes: createForm.notes,
@@ -574,6 +696,7 @@ export default function DeliveryNotesList() {
                   <TableHead className="text-right font-semibold">العميل</TableHead>
                   <TableHead className="text-right font-semibold">المخزن</TableHead>
                   <TableHead className="text-right font-semibold">فاتورة البيع</TableHead>
+                  <TableHead className="text-right font-semibold">أمر البيع</TableHead>
                   <TableHead className="text-right font-semibold">عدد الأصناف</TableHead>
                   <TableHead className="text-right font-semibold">الحالة</TableHead>
                   <TableHead className="text-right font-semibold">إجراءات</TableHead>
@@ -582,7 +705,7 @@ export default function DeliveryNotesList() {
               <TableBody>
                 {deliveryNotes.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12">
+                    <TableCell colSpan={9} className="text-center py-12">
                       <div className="flex flex-col items-center text-slate-400">
                         <Truck className="h-12 w-12 mb-3 text-slate-200" />
                         <p className="text-sm">لا توجد أذون صرف</p>
@@ -611,6 +734,9 @@ export default function DeliveryNotesList() {
                       </TableCell>
                       <TableCell className="text-sm text-slate-500">
                         {note.salesInvoice ? note.salesInvoice.number : '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-500">
+                        {note.salesOrder ? note.salesOrder.number : '—'}
                       </TableCell>
                       <TableCell className="text-center font-mono text-sm">
                         {note._count?.lines ?? 0}
@@ -726,7 +852,7 @@ export default function DeliveryNotesList() {
               <Select
                 value={createForm.salesInvoiceId}
                 onValueChange={(val) => handleSalesInvoiceChange(val)}
-                disabled={invoiceLoading}
+                disabled={invoiceLoading || !!createForm.salesOrderId}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="اختر فاتورة البيع" />
@@ -744,6 +870,30 @@ export default function DeliveryNotesList() {
               </Select>
             </div>
 
+            {/* Sales Order (optional) */}
+            <div className="space-y-2">
+              <Label>أمر البيع (اختياري)</Label>
+              <Select
+                value={createForm.salesOrderId}
+                onValueChange={(val) => handleSalesOrderChange(val)}
+                disabled={orderLoading || !!createForm.salesInvoiceId}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="اختر أمر البيع" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">بدون أمر بيع</SelectItem>
+                  {salesOrders
+                    .filter((ord) => ord.status === 'CONFIRMED')
+                    .map((ord) => (
+                      <SelectItem key={ord.id} value={ord.id}>
+                        {ord.number} - {ord.customer?.nameAr || '—'}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Customer (auto-filled from invoice or manual) */}
             <div className="space-y-2">
               <Label>العميل</Label>
@@ -752,7 +902,7 @@ export default function DeliveryNotesList() {
                 onValueChange={(val) =>
                   setCreateForm((p) => ({ ...p, customerId: val }))
                 }
-                disabled={!!createForm.salesInvoiceId}
+                disabled={!!createForm.salesInvoiceId || !!createForm.salesOrderId}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="اختر العميل" />
@@ -765,8 +915,8 @@ export default function DeliveryNotesList() {
                   ))}
                 </SelectContent>
               </Select>
-              {createForm.salesInvoiceId && (
-                <p className="text-xs text-slate-400">يتم تعبئته تلقائياً من الفاتورة</p>
+              {(createForm.salesInvoiceId || createForm.salesOrderId) && (
+                <p className="text-xs text-slate-400">يتم تعبئته تلقائياً من المستند المحدد</p>
               )}
             </div>
 
@@ -809,14 +959,14 @@ export default function DeliveryNotesList() {
                 size="sm"
                 onClick={handleAddLine}
                 className="gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                disabled={!!createForm.salesInvoiceId}
+                disabled={!!createForm.salesInvoiceId || !!createForm.salesOrderId}
               >
                 <Plus className="h-3.5 w-3.5" />
                 إضافة صنف
               </Button>
             </div>
-            {createForm.salesInvoiceId && (
-              <p className="text-xs text-slate-400">الأصناف معبأة تلقائياً من الفاتورة المحددة</p>
+            {(createForm.salesInvoiceId || createForm.salesOrderId) && (
+              <p className="text-xs text-slate-400">الأصناف معبأة تلقائياً من المستند المحدد</p>
             )}
 
             <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -832,7 +982,7 @@ export default function DeliveryNotesList() {
                     <Select
                       value={line.itemId}
                       onValueChange={(val) => handleLineChange(index, 'itemId', val)}
-                      disabled={!!createForm.salesInvoiceId}
+                      disabled={!!createForm.salesInvoiceId || !!createForm.salesOrderId}
                     >
                       <SelectTrigger className="w-full h-9">
                         <SelectValue placeholder="اختر الصنف" />
@@ -880,7 +1030,7 @@ export default function DeliveryNotesList() {
                     size="icon"
                     className="h-9 w-9 text-red-400 hover:text-red-600"
                     onClick={() => handleRemoveLine(index)}
-                    disabled={createLines.length === 1 || !!createForm.salesInvoiceId}
+                    disabled={createLines.length === 1 || !!createForm.salesInvoiceId || !!createForm.salesOrderId}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -898,7 +1048,7 @@ export default function DeliveryNotesList() {
             </Button>
             <Button
               onClick={handleCreateSubmit}
-              disabled={submitting || invoiceLoading}
+              disabled={submitting || invoiceLoading || orderLoading}
               className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -958,6 +1108,12 @@ export default function DeliveryNotesList() {
                     <p className="text-xs text-slate-500">فاتورة البيع</p>
                     <p className="text-sm font-medium text-slate-800">
                       {selectedNote.salesInvoice ? selectedNote.salesInvoice.number : '—'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-500">أمر البيع</p>
+                    <p className="text-sm font-medium text-slate-800">
+                      {selectedNote.salesOrder ? selectedNote.salesOrder.number : '—'}
                     </p>
                   </div>
                   <div className="space-y-1">
@@ -1056,15 +1212,36 @@ export default function DeliveryNotesList() {
                   </>
                 )}
                 {selectedNote.status === 'CONFIRMED' && (
-                  <Button
-                    variant="destructive"
-                    onClick={() => setCancelConfirmOpen(true)}
-                    disabled={submitting}
-                    className="gap-2"
-                  >
-                    <XCircle className="h-4 w-4" />
-                    إلغاء الإذن (عكس الحركات)
-                  </Button>
+                  <>
+                    <Button
+                      onClick={() => {
+                        localStorage.setItem('pendingSalesInvoice', JSON.stringify({
+                          id: selectedNote.id,
+                          number: selectedNote.number,
+                          customerId: selectedNote.customerId,
+                          lines: (selectedNote.lines || []).map((l) => ({
+                            itemId: l.itemId,
+                            quantity: l.quantity,
+                          })),
+                        }))
+                        useAppStore.getState().setModule('sales')
+                        useAppStore.getState().setView('sales-invoices')
+                      }}
+                      className="bg-amber-600 hover:bg-amber-700 text-white gap-2"
+                    >
+                      <FileText className="h-4 w-4" />
+                      إنشاء فاتورة بيع
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => setCancelConfirmOpen(true)}
+                      disabled={submitting}
+                      className="gap-2"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      إلغاء الإذن (عكس الحركات)
+                    </Button>
+                  </>
                 )}
               </DialogFooter>
             </>

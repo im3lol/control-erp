@@ -4,15 +4,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
   Plus,
-  Search,
   Loader2,
   FileText,
   CheckCircle2,
   XCircle,
   Pencil,
   Eye,
-  DollarSign,
   Trash2,
+  Truck,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,7 +20,6 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -66,6 +64,20 @@ import { useAppStore } from '@/lib/store'
 import { formatCurrency, formatDate, getStatusColor, getStatusLabel } from '@/lib/erp-utils'
 import { X } from 'lucide-react'
 
+// ── Extended status helpers (CLOSED is not in erp-utils) ──
+
+function getOrderStatusColor(status: string): string {
+  if (status === 'CLOSED') return 'bg-teal-100 text-teal-800'
+  return getStatusColor(status)
+}
+
+function getOrderStatusLabel(status: string): string {
+  if (status === 'CLOSED') return 'مغلق'
+  return getStatusLabel(status)
+}
+
+// ── Interfaces ──
+
 interface Customer {
   id: string
   code: string
@@ -81,19 +93,28 @@ interface Item {
   sellPrice: number
 }
 
-interface InvoiceLine {
+interface OrderLine {
   id?: string
   itemId: string
   quantity: number
+  deliveredQty?: number
   unitPrice: number
   discountAmount: number
   taxAmount: number
   totalAmount: number
+  notes?: string | null
   item?: Item & { uom?: { nameAr: string; code: string } | null }
-  costAmount?: number
 }
 
-interface SalesInvoice {
+interface DeliveryNoteRef {
+  id: string
+  number: string
+  date: string
+  status: string
+  _count: { lines: number }
+}
+
+interface SalesOrder {
   id: string
   number: string
   customerId: string
@@ -102,28 +123,18 @@ interface SalesInvoice {
   status: string
   subtotal: number
   discountAmount: number
+  discountPercent: number
   taxAmount: number
+  taxPercent: number
   totalAmount: number
-  paidAmount: number
-  balanceDue: number
   notes: string | null
   customer: Customer
-  lines: InvoiceLine[]
+  lines: OrderLine[]
+  deliveryNotes?: DeliveryNoteRef[]
   _count?: { lines: number }
-  receiptLines?: Array<{
-    id: string
-    amount: number
-    receiptVoucher: {
-      id: string
-      number: string
-      date: string
-      amount: number
-      paymentMethod: string
-    }
-  }>
 }
 
-interface InvoiceLineInput {
+interface OrderLineInput {
   itemId: string
   quantity: number
   unitPrice: number
@@ -131,7 +142,7 @@ interface InvoiceLineInput {
   taxAmount: number
 }
 
-const emptyLine: InvoiceLineInput = {
+const emptyLine: OrderLineInput = {
   itemId: '',
   quantity: 1,
   unitPrice: 0,
@@ -139,11 +150,11 @@ const emptyLine: InvoiceLineInput = {
   taxAmount: 0,
 }
 
-export default function SalesInvoicesList() {
+export default function SalesOrdersList() {
   const companyId = useAppStore(state => state.currentCompanyId)
   const itemFilter = useAppStore(state => state.itemFilter)
   const setItemFilter = useAppStore(state => state.setItemFilter)
-  const [invoices, setInvoices] = useState<SalesInvoice[]>([])
+  const [orders, setOrders] = useState<SalesOrder[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
@@ -152,16 +163,16 @@ export default function SalesInvoicesList() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
 
-  // New/Edit invoice state
+  // New/Edit order state
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [editingInvoice, setEditingInvoice] = useState<SalesInvoice | null>(null)
-  const [invoiceCustomerId, setInvoiceCustomerId] = useState('')
-  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
-  const [invoiceDueDate, setInvoiceDueDate] = useState('')
-  const [invoiceNotes, setInvoiceNotes] = useState('')
-  const [invoiceLines, setInvoiceLines] = useState<InvoiceLineInput[]>([{ ...emptyLine }])
-  const [invoiceDiscountAmount, setInvoiceDiscountAmount] = useState(0)
-  const [invoiceTaxAmount, setInvoiceTaxAmount] = useState(0)
+  const [editingOrder, setEditingOrder] = useState<SalesOrder | null>(null)
+  const [orderCustomerId, setOrderCustomerId] = useState('')
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0])
+  const [orderDueDate, setOrderDueDate] = useState('')
+  const [orderNotes, setOrderNotes] = useState('')
+  const [orderLines, setOrderLines] = useState<OrderLineInput[]>([{ ...emptyLine }])
+  const [orderDiscountAmount, setOrderDiscountAmount] = useState(0)
+  const [orderTaxPercent, setOrderTaxPercent] = useState(0)
   const [submitting, setSubmitting] = useState(false)
 
   // Confirm dialog
@@ -176,49 +187,16 @@ export default function SalesInvoicesList() {
 
   // Detail dialog
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
-  const [detailInvoice, setDetailInvoice] = useState<SalesInvoice | null>(null)
+  const [detailOrder, setDetailOrder] = useState<SalesOrder | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
-  // ── localStorage: Check for pending sales invoice from Delivery Note ──
   useEffect(() => {
-    try {
-      const pending = localStorage.getItem('pendingSalesInvoice')
-      if (pending) {
-        const data = JSON.parse(pending)
-        localStorage.removeItem('pendingSalesInvoice')
-
-        // Pre-fill the new invoice form
-        setEditingInvoice(null)
-        setInvoiceCustomerId(data.customerId || '')
-        setInvoiceNotes(`مرتبط بإذن صرف رقم ${data.number || ''}`)
-        if (data.lines && data.lines.length > 0) {
-          const prefillLines: InvoiceLineInput[] = data.lines.map((l: { itemId: string; quantity: number }) => ({
-            itemId: l.itemId,
-            quantity: l.quantity,
-            unitPrice: 0,
-            discountAmount: 0,
-            taxAmount: 0,
-          }))
-          if (prefillLines.length > 0) {
-            setInvoiceLines(prefillLines)
-          }
-        }
-
-        // Open new invoice sheet
-        setSheetOpen(true)
-      }
-    } catch {
-      // silently fail
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchInvoices()
+    fetchOrders()
     fetchCustomers()
     fetchItems()
   }, [])
 
-  const fetchInvoices = useCallback(async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       const params = new URLSearchParams()
       if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter)
@@ -227,21 +205,21 @@ export default function SalesInvoicesList() {
       if (toDate) params.set('toDate', toDate)
       if (itemFilter) params.set('itemId', itemFilter)
 
-      const res = await fetch(`/api/sales/invoices?companyId=${companyId}&${params.toString()}`)
+      const res = await fetch(`/api/sales/orders?companyId=${companyId}&${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
-        setInvoices(data)
+        setOrders(data)
       }
     } catch {
-      toast.error('فشل في تحميل فواتير البيع')
+      toast.error('فشل في تحميل أوامر البيع')
     } finally {
       setLoading(false)
     }
   }, [statusFilter, customerFilter, fromDate, toDate, itemFilter])
 
   useEffect(() => {
-    fetchInvoices()
-  }, [fetchInvoices])
+    fetchOrders()
+  }, [fetchOrders])
 
   const fetchCustomers = async () => {
     try {
@@ -267,24 +245,24 @@ export default function SalesInvoicesList() {
     }
   }
 
-  const fetchInvoiceDetail = async (id: string) => {
+  const fetchOrderDetail = async (id: string) => {
     setDetailLoading(true)
     try {
-      const res = await fetch(`/api/sales/invoices/${id}?companyId=${companyId}`)
+      const res = await fetch(`/api/sales/orders/${id}?companyId=${companyId}`)
       if (res.ok) {
         const data = await res.json()
-        setDetailInvoice(data)
+        setDetailOrder(data)
         setDetailDialogOpen(true)
       }
     } catch {
-      toast.error('فشل في تحميل تفاصيل الفاتورة')
+      toast.error('فشل في تحميل تفاصيل أمر البيع')
     } finally {
       setDetailLoading(false)
     }
   }
 
   // Calculate line total
-  const calcLineTotal = (line: InvoiceLineInput) => {
+  const calcLineTotal = (line: OrderLineInput) => {
     return line.quantity * line.unitPrice - line.discountAmount + line.taxAmount
   }
 
@@ -293,15 +271,20 @@ export default function SalesInvoicesList() {
     return invoiceLines.reduce((sum, l) => sum + calcLineTotal(l), 0)
   }
 
+  // Calculate tax from percent
+  const calcTaxAmount = () => {
+    return Math.round(calcSubtotal() * orderTaxPercent / 100 * 100) / 100
+  }
+
   // Calculate total
   const calcTotal = () => {
-    return calcSubtotal() - invoiceDiscountAmount + invoiceTaxAmount
+    return calcSubtotal() - orderDiscountAmount + calcTaxAmount()
   }
 
   // Handle item select in line
   const handleItemSelect = (index: number, itemId: string) => {
     const item = items.find((i) => i.id === itemId)
-    setInvoiceLines((prev) => {
+    setOrderLines((prev) => {
       const newLines = [...prev]
       newLines[index] = {
         ...newLines[index],
@@ -312,49 +295,52 @@ export default function SalesInvoicesList() {
     })
   }
 
+  // Alias for use inside calcSubtotal/calcTotal
+  const invoiceLines = orderLines
+
   // Add line
   const addLine = () => {
-    setInvoiceLines((prev) => [...prev, { ...emptyLine }])
+    setOrderLines((prev) => [...prev, { ...emptyLine }])
   }
 
   // Remove line
   const removeLine = (index: number) => {
-    setInvoiceLines((prev) => prev.filter((_, i) => i !== index))
+    setOrderLines((prev) => prev.filter((_, i) => i !== index))
   }
 
   // Update line field
-  const updateLine = (index: number, field: keyof InvoiceLineInput, value: number | string) => {
-    setInvoiceLines((prev) => {
+  const updateLine = (index: number, field: keyof OrderLineInput, value: number | string) => {
+    setOrderLines((prev) => {
       const newLines = [...prev]
       newLines[index] = { ...newLines[index], [field]: value }
       return newLines
     })
   }
 
-  // Open new invoice sheet
+  // Open new order sheet
   const handleOpenNew = () => {
-    setEditingInvoice(null)
-    setInvoiceCustomerId('')
-    setInvoiceDate(new Date().toISOString().split('T')[0])
-    setInvoiceDueDate('')
-    setInvoiceNotes('')
-    setInvoiceLines([{ ...emptyLine }])
-    setInvoiceDiscountAmount(0)
-    setInvoiceTaxAmount(0)
+    setEditingOrder(null)
+    setOrderCustomerId('')
+    setOrderDate(new Date().toISOString().split('T')[0])
+    setOrderDueDate('')
+    setOrderNotes('')
+    setOrderLines([{ ...emptyLine }])
+    setOrderDiscountAmount(0)
+    setOrderTaxPercent(0)
     setSheetOpen(true)
   }
 
-  // Open edit invoice
-  const handleOpenEdit = (invoice: SalesInvoice) => {
-    setEditingInvoice(invoice)
-    setInvoiceCustomerId(invoice.customerId)
-    setInvoiceDate(new Date(invoice.date).toISOString().split('T')[0])
-    setInvoiceDueDate(invoice.dueDate ? new Date(invoice.dueDate).toISOString().split('T')[0] : '')
-    setInvoiceNotes(invoice.notes || '')
-    setInvoiceDiscountAmount(invoice.discountAmount)
-    setInvoiceTaxAmount(invoice.taxAmount)
-    setInvoiceLines(
-      invoice.lines.map((l) => ({
+  // Open edit order
+  const handleOpenEdit = (order: SalesOrder) => {
+    setEditingOrder(order)
+    setOrderCustomerId(order.customerId)
+    setOrderDate(new Date(order.date).toISOString().split('T')[0])
+    setOrderDueDate(order.dueDate ? new Date(order.dueDate).toISOString().split('T')[0] : '')
+    setOrderNotes(order.notes || '')
+    setOrderDiscountAmount(order.discountAmount)
+    setOrderTaxPercent(order.taxPercent)
+    setOrderLines(
+      order.lines.map((l) => ({
         itemId: l.itemId,
         quantity: l.quantity,
         unitPrice: l.unitPrice,
@@ -365,14 +351,14 @@ export default function SalesInvoicesList() {
     setSheetOpen(true)
   }
 
-  // Submit invoice
+  // Submit order
   const handleSubmit = async () => {
-    if (!invoiceCustomerId) {
+    if (!orderCustomerId) {
       toast.error('يرجى اختيار العميل')
       return
     }
 
-    const validLines = invoiceLines.filter((l) => l.itemId && l.quantity > 0)
+    const validLines = orderLines.filter((l) => l.itemId && l.quantity > 0)
     if (validLines.length === 0) {
       toast.error('يجب إضافة سطر واحد على الأقل')
       return
@@ -380,19 +366,19 @@ export default function SalesInvoicesList() {
 
     setSubmitting(true)
     try {
-      if (editingInvoice) {
+      if (editingOrder) {
         // Update existing DRAFT
-        const res = await fetch(`/api/sales/invoices/${editingInvoice.id}?companyId=${companyId}`, {
+        const res = await fetch(`/api/sales/orders/${editingOrder.id}?companyId=${companyId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'update',
-            customerId: invoiceCustomerId,
-            date: invoiceDate,
-            dueDate: invoiceDueDate || null,
-            discountAmount: invoiceDiscountAmount,
-            taxAmount: invoiceTaxAmount,
-            notes: invoiceNotes || null,
+            customerId: orderCustomerId,
+            date: orderDate,
+            dueDate: orderDueDate || null,
+            discountAmount: orderDiscountAmount,
+            taxPercent: orderTaxPercent,
+            notes: orderNotes || null,
             lines: validLines.map((l) => ({
               itemId: l.itemId,
               quantity: l.quantity,
@@ -404,25 +390,25 @@ export default function SalesInvoicesList() {
           }),
         })
         if (res.ok) {
-          toast.success('تم تحديث الفاتورة بنجاح')
+          toast.success('تم تحديث أمر البيع بنجاح')
           setSheetOpen(false)
-          fetchInvoices()
+          fetchOrders()
         } else {
           const err = await res.json()
-          toast.error(err.error || 'فشل في تحديث الفاتورة')
+          toast.error(err.error || 'فشل في تحديث أمر البيع')
         }
       } else {
         // Create new
-        const res = await fetch(`/api/sales/invoices?companyId=${companyId}`, {
+        const res = await fetch(`/api/sales/orders?companyId=${companyId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            customerId: invoiceCustomerId,
-            date: invoiceDate,
-            dueDate: invoiceDueDate || null,
-            discountAmount: invoiceDiscountAmount,
-            taxAmount: invoiceTaxAmount,
-            notes: invoiceNotes || null,
+            customerId: orderCustomerId,
+            date: orderDate,
+            dueDate: orderDueDate || null,
+            discountAmount: orderDiscountAmount,
+            taxPercent: orderTaxPercent,
+            notes: orderNotes || null,
             lines: validLines.map((l) => ({
               itemId: l.itemId,
               quantity: l.quantity,
@@ -434,40 +420,40 @@ export default function SalesInvoicesList() {
           }),
         })
         if (res.ok) {
-          toast.success('تم إنشاء الفاتورة بنجاح')
+          toast.success('تم إنشاء أمر البيع بنجاح')
           setSheetOpen(false)
-          fetchInvoices()
+          fetchOrders()
         } else {
           const err = await res.json()
-          toast.error(err.error || 'فشل في إنشاء الفاتورة')
+          toast.error(err.error || 'فشل في إنشاء أمر البيع')
         }
       }
     } catch {
-      toast.error('حدث خطأ أثناء حفظ الفاتورة')
+      toast.error('حدث خطأ أثناء حفظ أمر البيع')
     } finally {
       setSubmitting(false)
     }
   }
 
-  // Confirm invoice
+  // Confirm order
   const handleConfirm = async () => {
     if (!confirmingId) return
     setConfirming(true)
     try {
-      const res = await fetch(`/api/sales/invoices/${confirmingId}?companyId=${companyId}`, {
+      const res = await fetch(`/api/sales/orders/${confirmingId}?companyId=${companyId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'confirm', companyId }),
       })
       if (res.ok) {
-        toast.success('تم تأكيد الفاتورة بنجاح')
-        fetchInvoices()
+        toast.success('تم تأكيد أمر البيع بنجاح')
+        fetchOrders()
       } else {
         const err = await res.json()
-        toast.error(err.error || 'فشل في تأكيد الفاتورة')
+        toast.error(err.error || 'فشل في تأكيد أمر البيع')
       }
     } catch {
-      toast.error('حدث خطأ أثناء تأكيد الفاتورة')
+      toast.error('حدث خطأ أثناء تأكيد أمر البيع')
     } finally {
       setConfirming(false)
       setConfirmDialogOpen(false)
@@ -475,30 +461,68 @@ export default function SalesInvoicesList() {
     }
   }
 
-  // Cancel invoice
+  // Cancel order
   const handleCancel = async () => {
     if (!cancellingId) return
     setCancelling(true)
     try {
-      const res = await fetch(`/api/sales/invoices/${cancellingId}?companyId=${companyId}`, {
+      const res = await fetch(`/api/sales/orders/${cancellingId}?companyId=${companyId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'cancel', companyId }),
       })
       if (res.ok) {
-        toast.success('تم إلغاء الفاتورة بنجاح')
-        fetchInvoices()
+        toast.success('تم إلغاء أمر البيع بنجاح')
+        fetchOrders()
       } else {
         const err = await res.json()
-        toast.error(err.error || 'فشل في إلغاء الفاتورة')
+        toast.error(err.error || 'فشل في إلغاء أمر البيع')
       }
     } catch {
-      toast.error('حدث خطأ أثناء إلغاء الفاتورة')
+      toast.error('حدث خطأ أثناء إلغاء أمر البيع')
     } finally {
       setCancelling(false)
       setCancelDialogOpen(false)
       setCancellingId(null)
     }
+  }
+
+  // Create Delivery Note from confirmed order
+  const handleCreateDeliveryNote = (order: SalesOrder) => {
+    // Store order data in localStorage for the delivery note to pick up
+    localStorage.setItem(
+      'pendingDeliveryNote',
+      JSON.stringify({
+        salesOrderId: order.id,
+        salesOrderNumber: order.number,
+        customerId: order.customerId,
+        customerName: order.customer.nameAr,
+        lines: order.lines.map((l) => ({
+          itemId: l.itemId,
+          itemName: l.item?.nameAr || '',
+          itemCode: l.item?.code || '',
+          quantity: l.quantity - (l.deliveredQty || 0), // remaining qty
+          orderedQty: l.quantity,
+          deliveredQty: l.deliveredQty || 0,
+          unitPrice: l.unitPrice,
+        })),
+      })
+    )
+    // Navigate to inventory > delivery-notes
+    useAppStore.getState().setModule('inventory')
+    useAppStore.getState().setView('delivery-notes')
+    toast.success('تم تحويل أمر البيع إلى إذن صرف')
+  }
+
+  // Calculate delivered percentage for an order
+  const getDeliveredInfo = (order: SalesOrder) => {
+    // We only have this info from the detail endpoint
+    // For the list view, we show a simpler indicator
+    if (!order.lines || order.lines.length === 0) return { delivered: 0, total: 0, percent: 0 }
+    const total = order.lines.reduce((sum, l) => sum + l.quantity, 0)
+    const delivered = order.lines.reduce((sum, l) => sum + (l.deliveredQty || 0), 0)
+    const percent = total > 0 ? Math.round((delivered / total) * 100) : 0
+    return { delivered, total, percent }
   }
 
   if (loading) {
@@ -531,9 +555,9 @@ export default function SalesInvoicesList() {
                 <FileText className="h-5 w-5 text-emerald-600" />
               </div>
               <div>
-                <CardTitle className="text-lg">فواتير البيع</CardTitle>
+                <CardTitle className="text-lg">أوامر البيع</CardTitle>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {invoices.length.toLocaleString('ar-EG')} فاتورة
+                  {orders.length.toLocaleString('ar-EG')} أمر بيع
                 </p>
               </div>
             </div>
@@ -542,7 +566,7 @@ export default function SalesInvoicesList() {
               className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
             >
               <Plus className="h-4 w-4" />
-              فاتورة بيع جديدة
+              أمر بيع جديد
             </Button>
           </div>
         </CardHeader>
@@ -569,9 +593,8 @@ export default function SalesInvoicesList() {
                   <SelectItem value="all">كل الحالات</SelectItem>
                   <SelectItem value="DRAFT">مسودة</SelectItem>
                   <SelectItem value="CONFIRMED">مؤكدة</SelectItem>
-                  <SelectItem value="PARTIAL_PAID">مدفوعة جزئياً</SelectItem>
-                  <SelectItem value="PAID">مدفوعة</SelectItem>
                   <SelectItem value="CANCELLED">ملغية</SelectItem>
+                  <SelectItem value="CLOSED">مغلقة</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -612,164 +635,167 @@ export default function SalesInvoicesList() {
                   <TableHead className="text-right font-semibold">الرقم</TableHead>
                   <TableHead className="text-right font-semibold">العميل</TableHead>
                   <TableHead className="text-right font-semibold">التاريخ</TableHead>
-                  <TableHead className="text-right font-semibold">المجموع</TableHead>
-                  <TableHead className="text-right font-semibold">الضريبة</TableHead>
                   <TableHead className="text-right font-semibold">الإجمالي</TableHead>
-                  <TableHead className="text-right font-semibold">المدفوع</TableHead>
-                  <TableHead className="text-right font-semibold">المتبقي</TableHead>
+                  <TableHead className="text-right font-semibold">المسلم</TableHead>
                   <TableHead className="text-right font-semibold">الحالة</TableHead>
                   <TableHead className="text-right font-semibold">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoices.length === 0 ? (
+                {orders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
+                    <TableCell colSpan={7} className="text-center py-12">
                       <div className="flex flex-col items-center text-slate-400">
                         <FileText className="h-12 w-12 mb-3 text-slate-200" />
-                        <p className="text-sm">لا توجد فواتير بيع</p>
+                        <p className="text-sm">لا توجد أوامر بيع</p>
                         <p className="text-xs mt-1 text-slate-300">
-                          اضغط على &quot;فاتورة بيع جديدة&quot; لإنشاء فاتورة
+                          اضغط على &quot;أمر بيع جديد&quot; لإنشاء أمر بيع
                         </p>
                       </div>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  invoices.map((inv) => (
-                    <TableRow key={inv.id}>
-                      <TableCell>
-                        <button
-                          onClick={() => fetchInvoiceDetail(inv.id)}
-                          className="font-mono text-sm text-emerald-700 hover:text-emerald-900 hover:underline font-semibold"
-                        >
-                          {inv.number}
-                        </button>
-                      </TableCell>
-                      <TableCell className="font-medium">{inv.customer.nameAr}</TableCell>
-                      <TableCell className="text-slate-500 text-sm">
-                        {formatDate(inv.date)}
-                      </TableCell>
-                      <TableCell className="font-mono" dir="ltr">
-                        {formatCurrency(inv.subtotal)}
-                      </TableCell>
-                      <TableCell className="font-mono" dir="ltr">
-                        {formatCurrency(inv.taxAmount)}
-                      </TableCell>
-                      <TableCell className="font-mono font-semibold" dir="ltr">
-                        {formatCurrency(inv.totalAmount)}
-                      </TableCell>
-                      <TableCell className="font-mono text-emerald-600" dir="ltr">
-                        {formatCurrency(inv.paidAmount)}
-                      </TableCell>
-                      <TableCell className="font-mono text-red-600" dir="ltr">
-                        {formatCurrency(inv.balanceDue)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`${getStatusColor(inv.status)} text-xs`}>
-                          {getStatusLabel(inv.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          {inv.status === 'DRAFT' && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setConfirmingId(inv.id)
-                                  setConfirmDialogOpen(true)
-                                }}
-                                className="h-8 w-8 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
-                                title="تأكيد"
-                              >
-                                <CheckCircle2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleOpenEdit(inv)}
-                                className="h-8 w-8 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
-                                title="تعديل"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setCancellingId(inv.id)
-                                  setCancelDialogOpen(true)
-                                }}
-                                className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                title="إلغاء"
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </Button>
-                            </>
+                  orders.map((order) => {
+                    const delInfo = getDeliveredInfo(order)
+                    return (
+                      <TableRow key={order.id}>
+                        <TableCell>
+                          <button
+                            onClick={() => fetchOrderDetail(order.id)}
+                            className="font-mono text-sm text-emerald-700 hover:text-emerald-900 hover:underline font-semibold"
+                          >
+                            {order.number}
+                          </button>
+                        </TableCell>
+                        <TableCell className="font-medium">{order.customer.nameAr}</TableCell>
+                        <TableCell className="text-slate-500 text-sm">
+                          {formatDate(order.date)}
+                        </TableCell>
+                        <TableCell className="font-mono font-semibold" dir="ltr">
+                          {formatCurrency(order.totalAmount)}
+                        </TableCell>
+                        <TableCell>
+                          {delInfo.percent > 0 ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden min-w-[60px]">
+                                <div
+                                  className="h-full bg-emerald-500 rounded-full transition-all"
+                                  style={{ width: `${delInfo.percent}%` }}
+                                />
+                              </div>
+                              <span className="text-xs font-mono text-emerald-600" dir="ltr">
+                                {delInfo.percent}%
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
                           )}
-                          {inv.status === 'CONFIRMED' && (
-                            <>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`${getOrderStatusColor(order.status)} text-xs`}>
+                            {getOrderStatusLabel(order.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {order.status === 'DRAFT' && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setConfirmingId(order.id)
+                                    setConfirmDialogOpen(true)
+                                  }}
+                                  className="h-8 w-8 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
+                                  title="تأكيد"
+                                >
+                                  <CheckCircle2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleOpenEdit(order)}
+                                  className="h-8 w-8 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                  title="تعديل"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setCancellingId(order.id)
+                                    setCancelDialogOpen(true)
+                                  }}
+                                  className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                  title="إلغاء"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                            {order.status === 'CONFIRMED' && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => fetchOrderDetail(order.id)}
+                                  className="h-8 w-8 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                  title="عرض التفاصيل"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleCreateDeliveryNote(order)}
+                                  className="h-8 w-8 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
+                                  title="إنشاء إذن صرف"
+                                >
+                                  <Truck className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setCancellingId(order.id)
+                                    setCancelDialogOpen(true)
+                                  }}
+                                  className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                  title="إلغاء"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                            {order.status === 'CLOSED' && (
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => fetchInvoiceDetail(inv.id)}
+                                onClick={() => fetchOrderDetail(order.id)}
                                 className="h-8 w-8 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
                                 title="عرض التفاصيل"
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
+                            )}
+                            {order.status === 'CANCELLED' && (
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => {
-                                  setCancellingId(inv.id)
-                                  setCancelDialogOpen(true)
-                                }}
-                                className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                title="إلغاء"
+                                onClick={() => fetchOrderDetail(order.id)}
+                                className="h-8 w-8 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                title="عرض التفاصيل"
                               >
-                                <XCircle className="h-4 w-4" />
+                                <Eye className="h-4 w-4" />
                               </Button>
-                            </>
-                          )}
-                          {inv.status === 'PARTIAL_PAID' && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => fetchInvoiceDetail(inv.id)}
-                              className="h-8 w-8 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
-                              title="عرض التفاصيل"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {inv.status === 'PAID' && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => fetchInvoiceDetail(inv.id)}
-                              className="h-8 w-8 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
-                              title="عرض التفاصيل"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {inv.status === 'CANCELLED' && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => fetchInvoiceDetail(inv.id)}
-                              className="h-8 w-8 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
-                              title="عرض التفاصيل"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
                 )}
               </TableBody>
             </Table>
@@ -777,26 +803,26 @@ export default function SalesInvoicesList() {
         </CardContent>
       </Card>
 
-      {/* New/Edit Invoice Sheet */}
+      {/* New/Edit Order Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="left" className="w-full sm:max-w-3xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
-              {editingInvoice ? 'تعديل فاتورة البيع' : 'فاتورة بيع جديدة'}
+              {editingOrder ? 'تعديل أمر البيع' : 'أمر بيع جديد'}
             </SheetTitle>
             <SheetDescription>
-              {editingInvoice ? 'قم بتعديل بيانات الفاتورة' : 'أدخل بيانات فاتورة البيع الجديدة'}
+              {editingOrder ? 'قم بتعديل بيانات أمر البيع' : 'أدخل بيانات أمر البيع الجديد'}
             </SheetDescription>
           </SheetHeader>
 
           <div className="mt-6 space-y-6">
-            {/* Invoice Header */}
+            {/* Order Header */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>
                   العميل <span className="text-red-500">*</span>
                 </Label>
-                <Select value={invoiceCustomerId} onValueChange={setInvoiceCustomerId}>
+                <Select value={orderCustomerId} onValueChange={setOrderCustomerId}>
                   <SelectTrigger>
                     <SelectValue placeholder="اختر العميل" />
                   </SelectTrigger>
@@ -813,23 +839,23 @@ export default function SalesInvoicesList() {
                 <Label>التاريخ</Label>
                 <Input
                   type="date"
-                  value={invoiceDate}
-                  onChange={(e) => setInvoiceDate(e.target.value)}
+                  value={orderDate}
+                  onChange={(e) => setOrderDate(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
                 <Label>تاريخ الاستحقاق</Label>
                 <Input
                   type="date"
-                  value={invoiceDueDate}
-                  onChange={(e) => setInvoiceDueDate(e.target.value)}
+                  value={orderDueDate}
+                  onChange={(e) => setOrderDueDate(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
                 <Label>ملاحظات</Label>
                 <Input
-                  value={invoiceNotes}
-                  onChange={(e) => setInvoiceNotes(e.target.value)}
+                  value={orderNotes}
+                  onChange={(e) => setOrderNotes(e.target.value)}
                   placeholder="ملاحظات إضافية"
                 />
               </div>
@@ -837,10 +863,10 @@ export default function SalesInvoicesList() {
 
             <Separator />
 
-            {/* Invoice Lines */}
+            {/* Order Lines */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">بنود الفاتورة</Label>
+                <Label className="text-base font-semibold">بنود أمر البيع</Label>
                 <Button
                   type="button"
                   variant="outline"
@@ -853,7 +879,7 @@ export default function SalesInvoicesList() {
                 </Button>
               </div>
 
-              {invoiceLines.map((line, index) => (
+              {orderLines.map((line, index) => (
                 <div
                   key={index}
                   className="grid grid-cols-12 gap-2 items-end border border-slate-100 rounded-lg p-3 bg-slate-50/50"
@@ -923,7 +949,7 @@ export default function SalesInvoicesList() {
                       variant="ghost"
                       size="icon"
                       onClick={() => removeLine(index)}
-                      disabled={invoiceLines.length <= 1}
+                      disabled={orderLines.length <= 1}
                       className="h-9 w-9 text-red-400 hover:text-red-600 hover:bg-red-50"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -938,25 +964,26 @@ export default function SalesInvoicesList() {
             {/* Totals */}
             <div className="space-y-3 bg-slate-50/50 rounded-lg p-4">
               <div className="flex items-center gap-4">
-                <Label className="w-24 text-sm">خصم الفاتورة</Label>
+                <Label className="w-24 text-sm">خصم الأمر</Label>
                 <Input
                   type="number"
                   min="0"
                   step="0.01"
-                  value={invoiceDiscountAmount}
-                  onChange={(e) => setInvoiceDiscountAmount(parseFloat(e.target.value) || 0)}
+                  value={orderDiscountAmount}
+                  onChange={(e) => setOrderDiscountAmount(parseFloat(e.target.value) || 0)}
                   className="h-9 w-32"
                   dir="ltr"
                 />
               </div>
               <div className="flex items-center gap-4">
-                <Label className="w-24 text-sm">الضريبة</Label>
+                <Label className="w-24 text-sm">نسبة الضريبة %</Label>
                 <Input
                   type="number"
                   min="0"
+                  max="100"
                   step="0.01"
-                  value={invoiceTaxAmount}
-                  onChange={(e) => setInvoiceTaxAmount(parseFloat(e.target.value) || 0)}
+                  value={orderTaxPercent}
+                  onChange={(e) => setOrderTaxPercent(parseFloat(e.target.value) || 0)}
                   className="h-9 w-32"
                   dir="ltr"
                 />
@@ -968,11 +995,11 @@ export default function SalesInvoicesList() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">الخصم</span>
-                <span className="font-mono text-red-500" dir="ltr">-{formatCurrency(invoiceDiscountAmount)}</span>
+                <span className="font-mono text-red-500" dir="ltr">-{formatCurrency(orderDiscountAmount)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">الضريبة</span>
-                <span className="font-mono text-orange-500" dir="ltr">+{formatCurrency(invoiceTaxAmount)}</span>
+                <span className="text-slate-500">الضريبة ({orderTaxPercent}%)</span>
+                <span className="font-mono text-orange-500" dir="ltr">+{formatCurrency(calcTaxAmount())}</span>
               </div>
               <Separator />
               <div className="flex justify-between text-lg font-bold">
@@ -1003,9 +1030,9 @@ export default function SalesInvoicesList() {
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الفاتورة</AlertDialogTitle>
+            <AlertDialogTitle>تأكيد أمر البيع</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من تأكيد هذه الفاتورة؟ سيتم خصم الكميات من المخزون وإنشاء قيود محاسبية تلقائياً. لا يمكن التراجع عن هذا الإجراء.
+              هل أنت متأكد من تأكيد أمر البيع؟ بعد التأكيد يمكنك إنشاء أذون صرف من هذا الأمر. لا يمكن التراجع عن هذا الإجراء.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1026,9 +1053,9 @@ export default function SalesInvoicesList() {
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>إلغاء الفاتورة</AlertDialogTitle>
+            <AlertDialogTitle>إلغاء أمر البيع</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من إلغاء هذه الفاتورة؟ سيتم عكس حركات المخزون والقيود المحاسبية إذا كانت مؤكدة.
+              هل أنت متأكد من إلغاء أمر البيع؟ سيتم إلغاء الأمر ولن يتمكن من إنشاء أذون صرف منه.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1039,30 +1066,30 @@ export default function SalesInvoicesList() {
               className="bg-red-600 hover:bg-red-700 text-white gap-2"
             >
               {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
-              إلغاء الفاتورة
+              إلغاء أمر البيع
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Invoice Detail Dialog */}
+      {/* Order Detail Dialog */}
       <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           {detailLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
             </div>
-          ) : detailInvoice ? (
+          ) : detailOrder ? (
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-3">
-                  <span>فاتورة بيع {detailInvoice.number}</span>
-                  <Badge className={`${getStatusColor(detailInvoice.status)} text-xs`}>
-                    {getStatusLabel(detailInvoice.status)}
+                  <span>أمر بيع {detailOrder.number}</span>
+                  <Badge className={`${getOrderStatusColor(detailOrder.status)} text-xs`}>
+                    {getOrderStatusLabel(detailOrder.status)}
                   </Badge>
                 </DialogTitle>
                 <DialogDescription>
-                  {formatDate(detailInvoice.date)} — {detailInvoice.customer.nameAr}
+                  {formatDate(detailOrder.date)} — {detailOrder.customer.nameAr}
                 </DialogDescription>
               </DialogHeader>
 
@@ -1071,105 +1098,143 @@ export default function SalesInvoicesList() {
                 <div className="grid grid-cols-2 gap-4 bg-slate-50 rounded-lg p-4">
                   <div>
                     <span className="text-xs text-slate-400">العميل</span>
-                    <p className="font-medium">{detailInvoice.customer.nameAr}</p>
-                    <p className="text-xs text-slate-400" dir="ltr">{detailInvoice.customer.code}</p>
+                    <p className="font-medium">{detailOrder.customer.nameAr}</p>
+                    <p className="text-xs text-slate-400" dir="ltr">{detailOrder.customer.code}</p>
                   </div>
                   <div>
                     <span className="text-xs text-slate-400">التاريخ</span>
-                    <p className="font-medium">{formatDate(detailInvoice.date)}</p>
-                    {detailInvoice.dueDate && (
-                      <p className="text-xs text-slate-400">استحقاق: {formatDate(detailInvoice.dueDate)}</p>
+                    <p className="font-medium">{formatDate(detailOrder.date)}</p>
+                    {detailOrder.dueDate && (
+                      <p className="text-xs text-slate-400">استحقاق: {formatDate(detailOrder.dueDate)}</p>
                     )}
                   </div>
                 </div>
+
+                {/* Notes */}
+                {detailOrder.notes && (
+                  <div className="bg-slate-50 rounded-lg p-3">
+                    <span className="text-xs text-slate-400">ملاحظات</span>
+                    <p className="text-sm mt-1">{detailOrder.notes}</p>
+                  </div>
+                )}
 
                 {/* Lines */}
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-slate-50">
-                        <TableHead className="text-right text-xs">الصنف</TableHead>
-                        <TableHead className="text-right text-xs">الكمية</TableHead>
-                        <TableHead className="text-right text-xs">سعر الوحدة</TableHead>
-                        <TableHead className="text-right text-xs">خصم</TableHead>
-                        <TableHead className="text-right text-xs">ضريبة</TableHead>
-                        <TableHead className="text-right text-xs">الإجمالي</TableHead>
+                      <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                        <TableHead className="text-right">الصنف</TableHead>
+                        <TableHead className="text-right">الكمية</TableHead>
+                        <TableHead className="text-right">المسلمة</TableHead>
+                        <TableHead className="text-right">سعر الوحدة</TableHead>
+                        <TableHead className="text-right">الخصم</TableHead>
+                        <TableHead className="text-right">الإجمالي</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {detailInvoice.lines.map((line) => (
-                        <TableRow key={line.id}>
-                          <TableCell className="font-medium text-sm">
-                            {line.item?.nameAr || '—'}
-                            <span className="text-xs text-slate-400 block" dir="ltr">
-                              {line.item?.code}
-                            </span>
-                          </TableCell>
-                          <TableCell className="font-mono text-sm" dir="ltr">{line.quantity}</TableCell>
-                          <TableCell className="font-mono text-sm" dir="ltr">{formatCurrency(line.unitPrice)}</TableCell>
-                          <TableCell className="font-mono text-sm" dir="ltr">{formatCurrency(line.discountAmount)}</TableCell>
-                          <TableCell className="font-mono text-sm" dir="ltr">{formatCurrency(line.taxAmount)}</TableCell>
-                          <TableCell className="font-mono text-sm font-semibold" dir="ltr">
-                            {formatCurrency(line.totalAmount)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {detailOrder.lines.map((line) => {
+                        const deliveredQty = line.deliveredQty || 0
+                        const remaining = line.quantity - deliveredQty
+                        const isFullyDelivered = deliveredQty >= line.quantity
+                        return (
+                          <TableRow key={line.id}>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium text-sm">{line.item?.nameAr || '—'}</p>
+                                <p className="text-xs text-slate-400" dir="ltr">{line.item?.code || ''}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-mono text-sm" dir="ltr">
+                              {line.quantity}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <span className={`font-mono text-sm ${isFullyDelivered ? 'text-emerald-600' : remaining > 0 && deliveredQty > 0 ? 'text-amber-600' : ''}`} dir="ltr">
+                                  {deliveredQty}
+                                </span>
+                                {!isFullyDelivered && deliveredQty > 0 && (
+                                  <Badge className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0">
+                                    متبقي {remaining}
+                                  </Badge>
+                                )}
+                                {isFullyDelivered && (
+                                  <Badge className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5 py-0">
+                                    مكتمل
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-mono text-sm" dir="ltr">
+                              {formatCurrency(line.unitPrice)}
+                            </TableCell>
+                            <TableCell className="font-mono text-sm" dir="ltr">
+                              {formatCurrency(line.discountAmount)}
+                            </TableCell>
+                            <TableCell className="font-mono text-sm font-semibold" dir="ltr">
+                              {formatCurrency(line.totalAmount)}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>
 
-                {/* Totals */}
+                {/* Totals summary */}
                 <div className="bg-slate-50 rounded-lg p-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500">المجموع الفرعي</span>
-                    <span className="font-mono" dir="ltr">{formatCurrency(detailInvoice.subtotal)}</span>
+                    <span className="font-mono" dir="ltr">{formatCurrency(detailOrder.subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500">الخصم</span>
-                    <span className="font-mono text-red-500" dir="ltr">-{formatCurrency(detailInvoice.discountAmount)}</span>
+                    <span className="font-mono text-red-500" dir="ltr">-{formatCurrency(detailOrder.discountAmount)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">الضريبة</span>
-                    <span className="font-mono text-orange-500" dir="ltr">+{formatCurrency(detailInvoice.taxAmount)}</span>
+                    <span className="text-slate-500">الضريبة ({detailOrder.taxPercent}%)</span>
+                    <span className="font-mono text-orange-500" dir="ltr">+{formatCurrency(detailOrder.taxAmount)}</span>
                   </div>
                   <Separator />
                   <div className="flex justify-between text-lg font-bold">
                     <span>الإجمالي</span>
-                    <span className="font-mono text-emerald-700" dir="ltr">{formatCurrency(detailInvoice.totalAmount)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-emerald-600">المدفوع</span>
-                    <span className="font-mono text-emerald-600" dir="ltr">{formatCurrency(detailInvoice.paidAmount)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm font-semibold">
-                    <span className="text-red-600">المتبقي</span>
-                    <span className="font-mono text-red-600" dir="ltr">{formatCurrency(detailInvoice.balanceDue)}</span>
+                    <span className="font-mono text-emerald-700" dir="ltr">{formatCurrency(detailOrder.totalAmount)}</span>
                   </div>
                 </div>
 
-                {/* Payment History */}
-                {detailInvoice.receiptLines && detailInvoice.receiptLines.length > 0 && (
+                {/* Linked Delivery Notes */}
+                {detailOrder.deliveryNotes && detailOrder.deliveryNotes.length > 0 && (
                   <div className="space-y-2">
-                    <Label className="text-sm font-semibold">سجل المدفوعات</Label>
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-emerald-600" />
+                      أذون الصرف المرتبطة
+                    </Label>
                     <div className="border rounded-lg overflow-hidden">
                       <Table>
                         <TableHeader>
-                          <TableRow className="bg-slate-50">
-                            <TableHead className="text-right text-xs">رقم السند</TableHead>
-                            <TableHead className="text-right text-xs">التاريخ</TableHead>
-                            <TableHead className="text-right text-xs">المبلغ</TableHead>
-                            <TableHead className="text-right text-xs">طريقة الدفع</TableHead>
+                          <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                            <TableHead className="text-right">رقم الإذن</TableHead>
+                            <TableHead className="text-right">التاريخ</TableHead>
+                            <TableHead className="text-right">عدد الأصناف</TableHead>
+                            <TableHead className="text-right">الحالة</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {detailInvoice.receiptLines.map((rl) => (
-                            <TableRow key={rl.id}>
-                              <TableCell className="font-mono text-sm">{rl.receiptVoucher.number}</TableCell>
-                              <TableCell className="text-sm">{formatDate(rl.receiptVoucher.date)}</TableCell>
-                              <TableCell className="font-mono text-sm text-emerald-600" dir="ltr">
-                                {formatCurrency(rl.amount)}
+                          {detailOrder.deliveryNotes.map((dn) => (
+                            <TableRow key={dn.id}>
+                              <TableCell className="font-mono text-sm text-emerald-700" dir="ltr">
+                                {dn.number}
                               </TableCell>
-                              <TableCell className="text-sm">{rl.receiptVoucher.paymentMethod}</TableCell>
+                              <TableCell className="text-sm text-slate-500">
+                                {formatDate(dn.date)}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {dn._count.lines}
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={`${getStatusColor(dn.status)} text-xs`}>
+                                  {getStatusLabel(dn.status)}
+                                </Badge>
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -1178,12 +1243,24 @@ export default function SalesInvoicesList() {
                   </div>
                 )}
 
-                {detailInvoice.notes && (
-                  <div className="bg-slate-50 rounded-lg p-4">
-                    <span className="text-xs text-slate-400">ملاحظات</span>
-                    <p className="text-sm mt-1">{detailInvoice.notes}</p>
-                  </div>
-                )}
+                {/* Actions in detail dialog */}
+                <div className="flex justify-end gap-3 pt-2">
+                  {detailOrder.status === 'CONFIRMED' && (
+                    <Button
+                      onClick={() => {
+                        handleCreateDeliveryNote(detailOrder)
+                        setDetailDialogOpen(false)
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                    >
+                      <Truck className="h-4 w-4" />
+                      إنشاء إذن صرف
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={() => setDetailDialogOpen(false)}>
+                    إغلاق
+                  </Button>
+                </div>
               </div>
             </>
           ) : null}

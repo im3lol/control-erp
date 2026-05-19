@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   Trash2,
+  FileText,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -112,6 +113,7 @@ interface PurchaseReceipt {
   date: string
   status: string
   purchaseInvoiceId: string | null
+  purchaseOrderId: string | null
   supplierId: string | null
   warehouseId: string
   notes: string | null
@@ -119,6 +121,7 @@ interface PurchaseReceipt {
   supplier?: { id: string; code: string; nameAr: string; nameEn?: string }
   warehouse?: { id: string; code: string; nameAr: string; nameEn?: string }
   purchaseInvoice?: { id: string; number: string }
+  purchaseOrder?: { id: string; number: string }
   _count?: { lines: number }
   lines?: PurchaseReceiptLine[]
 }
@@ -127,6 +130,16 @@ interface PurchaseReceiptLineInput {
   itemId: string
   quantity: number
   notes: string
+}
+
+interface PurchaseOrder {
+  id: string
+  number: string
+  supplierId: string
+  warehouseId: string
+  status: string
+  supplier?: { id: string; code: string; nameAr: string; nameEn?: string }
+  _count?: { lines: number }
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -170,6 +183,7 @@ export default function PurchaseReceiptsList() {
   const [items, setItems] = useState<Item[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [purchaseInvoices, setPurchaseInvoices] = useState<PurchaseInvoice[]>([])
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
@@ -178,6 +192,7 @@ export default function PurchaseReceiptsList() {
   const [createForm, setCreateForm] = useState({
     warehouseId: '',
     purchaseInvoiceId: '',
+    purchaseOrderId: '',
     supplierId: '',
     date: new Date().toISOString().split('T')[0],
     notes: '',
@@ -257,6 +272,18 @@ export default function PurchaseReceiptsList() {
     }
   }, [companyId])
 
+  const fetchPurchaseOrders = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/purchases/orders?companyId=${companyId}&status=CONFIRMED`)
+      if (res.ok) {
+        const data = await res.json()
+        setPurchaseOrders(data)
+      }
+    } catch {
+      // silently fail
+    }
+  }, [companyId])
+
   useEffect(() => {
     if (companyId) {
       fetchReceipts()
@@ -264,8 +291,47 @@ export default function PurchaseReceiptsList() {
       fetchItems()
       fetchSuppliers()
       fetchPurchaseInvoices()
+      fetchPurchaseOrders()
     }
-  }, [companyId, fetchReceipts, fetchWarehouses, fetchItems, fetchSuppliers, fetchPurchaseInvoices])
+  }, [companyId, fetchReceipts, fetchWarehouses, fetchItems, fetchSuppliers, fetchPurchaseInvoices, fetchPurchaseOrders])
+
+  // ── localStorage: Auto-fill from incoming Purchase Order ────────────────
+  useEffect(() => {
+    try {
+      const pending = localStorage.getItem('pendingPurchaseReceipt')
+      if (pending) {
+        const data = JSON.parse(pending)
+        localStorage.removeItem('pendingPurchaseReceipt')
+
+        setCreateForm({
+          warehouseId: data.warehouseId || '',
+          purchaseInvoiceId: '',
+          purchaseOrderId: data.purchaseOrderId || '',
+          supplierId: data.supplierId || '',
+          date: data.date || new Date().toISOString().split('T')[0],
+          notes: '',
+        })
+
+        // Pre-fill lines with remaining qty from order
+        if (data.lines && data.lines.length > 0) {
+          const orderLines: PurchaseReceiptLineInput[] = data.lines
+            .filter((l: { remainingQty: number }) => l.remainingQty > 0)
+            .map((l: { itemId: string; remainingQty: number }) => ({
+              itemId: l.itemId,
+              quantity: l.remainingQty,
+              notes: '',
+            }))
+          if (orderLines.length > 0) {
+            setCreateLines(orderLines)
+          }
+        }
+
+        setCreateDialogOpen(true)
+      }
+    } catch {
+      // silently fail
+    }
+  }, [])
 
   // ── Display Name Helpers ────────────────────────────────────────────────
 
@@ -288,12 +354,12 @@ export default function PurchaseReceiptsList() {
 
   const handlePurchaseInvoiceChange = async (invoiceId: string) => {
     if (!invoiceId || invoiceId === '__none__') {
-      setCreateForm((p) => ({ ...p, purchaseInvoiceId: '', supplierId: '' }))
+      setCreateForm((p) => ({ ...p, purchaseInvoiceId: '', supplierId: '', purchaseOrderId: '' }))
       setCreateLines([{ ...initialLineInput }])
       return
     }
 
-    setCreateForm((p) => ({ ...p, purchaseInvoiceId: invoiceId }))
+    setCreateForm((p) => ({ ...p, purchaseInvoiceId: invoiceId, purchaseOrderId: '' }))
     setInvoiceLoading(true)
 
     try {
@@ -322,12 +388,62 @@ export default function PurchaseReceiptsList() {
     }
   }
 
+  // ── Purchase Order Auto-fill ──────────────────────────────────────────
+
+  const handlePurchaseOrderChange = async (orderId: string) => {
+    if (!orderId || orderId === '__none__') {
+      setCreateForm((p) => ({ ...p, purchaseOrderId: '', supplierId: '', warehouseId: '', purchaseInvoiceId: '' }))
+      setCreateLines([{ ...initialLineInput }])
+      return
+    }
+
+    setCreateForm((p) => ({ ...p, purchaseOrderId: orderId, purchaseInvoiceId: '' }))
+    setInvoiceLoading(true)
+
+    try {
+      const res = await fetch(`/api/purchases/orders/${orderId}?companyId=${companyId}`)
+      if (res.ok) {
+        const order = await res.json()
+        // Auto-fill supplierId and warehouseId from the purchase order
+        setCreateForm((p) => ({
+          ...p,
+          supplierId: order.supplierId,
+          warehouseId: order.warehouseId,
+        }))
+
+        // Pre-populate lines from order items (remaining qty)
+        if (order.lines && order.lines.length > 0) {
+          const orderLines: PurchaseReceiptLineInput[] = order.lines
+            .filter((l: { quantity: number; receivedQty: number }) => (l.quantity - l.receivedQty) > 0)
+            .map((l: { itemId: string; quantity: number; receivedQty: number }) => ({
+              itemId: l.itemId,
+              quantity: l.quantity - l.receivedQty,
+              notes: '',
+            }))
+          if (orderLines.length > 0) {
+            setCreateLines(orderLines)
+          } else {
+            toast.info('جميع أصناف أمر الشراء تم استلامها بالكامل')
+            setCreateLines([{ ...initialLineInput }])
+          }
+        }
+      } else {
+        toast.error('فشل في تحميل تفاصيل أمر الشراء')
+      }
+    } catch {
+      toast.error('حدث خطأ أثناء تحميل أمر الشراء')
+    } finally {
+      setInvoiceLoading(false)
+    }
+  }
+
   // ── Create Purchase Receipt Handlers ──────────────────────────────────────
 
   const handleOpenCreate = () => {
     setCreateForm({
       warehouseId: '',
       purchaseInvoiceId: '',
+      purchaseOrderId: '',
       supplierId: '',
       date: new Date().toISOString().split('T')[0],
       notes: '',
@@ -375,6 +491,7 @@ export default function PurchaseReceiptsList() {
           companyId,
           warehouseId: createForm.warehouseId,
           purchaseInvoiceId: createForm.purchaseInvoiceId || undefined,
+          purchaseOrderId: createForm.purchaseOrderId || undefined,
           supplierId: createForm.supplierId || undefined,
           date: createForm.date,
           notes: createForm.notes,
@@ -574,6 +691,7 @@ export default function PurchaseReceiptsList() {
                   <TableHead className="text-right font-semibold">المورد</TableHead>
                   <TableHead className="text-right font-semibold">المخزن</TableHead>
                   <TableHead className="text-right font-semibold">فاتورة الشراء</TableHead>
+                  <TableHead className="text-right font-semibold">أمر الشراء</TableHead>
                   <TableHead className="text-right font-semibold">عدد الأصناف</TableHead>
                   <TableHead className="text-right font-semibold">الحالة</TableHead>
                   <TableHead className="text-right font-semibold">إجراءات</TableHead>
@@ -582,7 +700,7 @@ export default function PurchaseReceiptsList() {
               <TableBody>
                 {receipts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12">
+                    <TableCell colSpan={9} className="text-center py-12">
                       <div className="flex flex-col items-center text-slate-400">
                         <PackageCheck className="h-12 w-12 mb-3 text-slate-200" />
                         <p className="text-sm">لا توجد أذون استلام مشتريات</p>
@@ -611,6 +729,9 @@ export default function PurchaseReceiptsList() {
                       </TableCell>
                       <TableCell className="text-sm text-slate-500">
                         {receipt.purchaseInvoice ? receipt.purchaseInvoice.number : '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-500">
+                        {receipt.purchaseOrder ? receipt.purchaseOrder.number : '—'}
                       </TableCell>
                       <TableCell className="text-center font-mono text-sm">
                         {receipt._count?.lines ?? 0}
@@ -720,6 +841,30 @@ export default function PurchaseReceiptsList() {
               </Select>
             </div>
 
+            {/* Purchase Order (optional) */}
+            <div className="space-y-2">
+              <Label>أمر الشراء (اختياري)</Label>
+              <Select
+                value={createForm.purchaseOrderId || '__none__'}
+                onValueChange={(val) => handlePurchaseOrderChange(val)}
+                disabled={invoiceLoading}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="اختر أمر الشراء" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">بدون أمر شراء</SelectItem>
+                  {purchaseOrders
+                    .filter((po) => po.status === 'CONFIRMED')
+                    .map((po) => (
+                      <SelectItem key={po.id} value={po.id}>
+                        {po.number} - {po.supplier?.nameAr || '—'}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Purchase Invoice (optional) */}
             <div className="space-y-2">
               <Label>فاتورة الشراء (اختياري)</Label>
@@ -752,7 +897,7 @@ export default function PurchaseReceiptsList() {
                 onValueChange={(val) =>
                   setCreateForm((p) => ({ ...p, supplierId: val }))
                 }
-                disabled={!!createForm.purchaseInvoiceId}
+                disabled={!!createForm.purchaseInvoiceId || !!createForm.purchaseOrderId}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="اختر المورد" />
@@ -765,8 +910,8 @@ export default function PurchaseReceiptsList() {
                   ))}
                 </SelectContent>
               </Select>
-              {createForm.purchaseInvoiceId && (
-                <p className="text-xs text-slate-400">يتم تعبئته تلقائياً من الفاتورة</p>
+              {(createForm.purchaseInvoiceId || createForm.purchaseOrderId) && (
+                <p className="text-xs text-slate-400">يتم تعبئته تلقائياً من {createForm.purchaseOrderId ? 'أمر الشراء' : 'الفاتورة'}</p>
               )}
             </div>
 
@@ -809,14 +954,14 @@ export default function PurchaseReceiptsList() {
                 size="sm"
                 onClick={handleAddLine}
                 className="gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                disabled={!!createForm.purchaseInvoiceId}
+                disabled={!!createForm.purchaseInvoiceId || !!createForm.purchaseOrderId}
               >
                 <Plus className="h-3.5 w-3.5" />
                 إضافة صنف
               </Button>
             </div>
-            {createForm.purchaseInvoiceId && (
-              <p className="text-xs text-slate-400">الأصناف معبأة تلقائياً من الفاتورة المحددة</p>
+            {(createForm.purchaseInvoiceId || createForm.purchaseOrderId) && (
+              <p className="text-xs text-slate-400">الأصناف معبأة تلقائياً من {createForm.purchaseOrderId ? 'أمر الشراء' : 'الفاتورة'} المحددة</p>
             )}
 
             <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -832,7 +977,7 @@ export default function PurchaseReceiptsList() {
                     <Select
                       value={line.itemId}
                       onValueChange={(val) => handleLineChange(index, 'itemId', val)}
-                      disabled={!!createForm.purchaseInvoiceId}
+                      disabled={!!createForm.purchaseInvoiceId || !!createForm.purchaseOrderId}
                     >
                       <SelectTrigger className="w-full h-9">
                         <SelectValue placeholder="اختر الصنف" />
@@ -880,7 +1025,7 @@ export default function PurchaseReceiptsList() {
                     size="icon"
                     className="h-9 w-9 text-red-400 hover:text-red-600"
                     onClick={() => handleRemoveLine(index)}
-                    disabled={createLines.length === 1 || !!createForm.purchaseInvoiceId}
+                    disabled={createLines.length === 1 || !!createForm.purchaseInvoiceId || !!createForm.purchaseOrderId}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -958,6 +1103,12 @@ export default function PurchaseReceiptsList() {
                     <p className="text-xs text-slate-500">فاتورة الشراء</p>
                     <p className="text-sm font-medium text-slate-800">
                       {selectedReceipt.purchaseInvoice ? selectedReceipt.purchaseInvoice.number : '—'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-500">أمر الشراء</p>
+                    <p className="text-sm font-medium text-slate-800">
+                      {selectedReceipt.purchaseOrder ? selectedReceipt.purchaseOrder.number : '—'}
                     </p>
                   </div>
                   <div className="space-y-1">
@@ -1056,15 +1207,37 @@ export default function PurchaseReceiptsList() {
                   </>
                 )}
                 {selectedReceipt.status === 'CONFIRMED' && (
-                  <Button
-                    variant="destructive"
-                    onClick={() => setCancelConfirmOpen(true)}
-                    disabled={submitting}
-                    className="gap-2"
-                  >
-                    <XCircle className="h-4 w-4" />
-                    إلغاء الإذن (عكس حركات المخزون)
-                  </Button>
+                  <>
+                    <Button
+                      onClick={() => {
+                        localStorage.setItem('pendingPurchaseInvoice', JSON.stringify({
+                          id: selectedReceipt.id,
+                          number: selectedReceipt.number,
+                          supplierId: selectedReceipt.supplierId,
+                          warehouseId: selectedReceipt.warehouseId,
+                          lines: (selectedReceipt.lines || []).map((l) => ({
+                            itemId: l.itemId,
+                            quantity: l.quantity,
+                          })),
+                        }))
+                        useAppStore.getState().setModule('purchases')
+                        useAppStore.getState().setView('purchase-invoices')
+                      }}
+                      className="bg-amber-600 hover:bg-amber-700 text-white gap-2"
+                    >
+                      <FileText className="h-4 w-4" />
+                      إنشاء فاتورة شراء
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => setCancelConfirmOpen(true)}
+                      disabled={submitting}
+                      className="gap-2"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      إلغاء الإذن (عكس حركات المخزون)
+                    </Button>
+                  </>
                 )}
               </DialogFooter>
             </>

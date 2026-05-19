@@ -114,7 +114,16 @@ export async function PUT(
 
       // Use transaction for all confirm operations
       const result = await db.$transaction(async (tx) => {
+        // Check if there are linked purchase receipts (stock already handled by receipt)
+        const linkedReceipts = await tx.purchaseReceipt.findMany({
+          where: { purchaseInvoiceId: invoice.id, status: 'CONFIRMED' },
+          select: { id: true },
+        })
+        const hasLinkedReceipts = linkedReceipts.length > 0
+
         // 1. Create StockMovements (IN) and FifoLayers, update ItemBalances
+        //    ONLY if there are no linked purchase receipts (receipt already handled stock)
+        if (!hasLinkedReceipts) {
         for (const line of invoice.lines) {
           const qty = line.quantity
           const unitCost = line.unitPrice
@@ -197,6 +206,7 @@ export async function PUT(
             })
           }
         }
+        } // end if (!hasLinkedReceipts)
 
         // 4. Create Journal Entry - look up accounts by companyId + code
         const inventoryAccount = await tx.account.findFirst({

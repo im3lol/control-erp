@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
         salesInvoice: {
           select: { id: true, number: true },
         },
+        salesOrder: {
+          select: { id: true, number: true },
+        },
         _count: {
           select: { lines: true },
         },
@@ -49,7 +52,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requirePermission('inventory.create', request)
     const body = await request.json()
-    const { companyId, salesInvoiceId, customerId, warehouseId, date, notes, lines } = body
+    const { companyId, salesInvoiceId, salesOrderId, customerId, warehouseId, date, notes, lines } = body
 
     if (!companyId) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
@@ -112,6 +115,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // If salesOrderId is provided, auto-fill customerId and validate items
+    if (salesOrderId) {
+      const salesOrder = await db.salesOrder.findUnique({
+        where: { id: salesOrderId },
+        include: {
+          lines: {
+            select: { id: true, itemId: true, quantity: true },
+          },
+        },
+      })
+
+      if (!salesOrder || salesOrder.companyId !== companyId) {
+        return NextResponse.json(
+          { error: 'أمر البيع غير موجود أو لا ينتمي لهذه الشركة' },
+          { status: 404 }
+        )
+      }
+
+      // Auto-fill customerId from the sales order (if not already set by salesInvoice)
+      if (!resolvedCustomerId) {
+        resolvedCustomerId = salesOrder.customerId
+      }
+    }
+
     // Validate customer if provided
     if (resolvedCustomerId) {
       const customer = await db.customer.findUnique({ where: { id: resolvedCustomerId } })
@@ -158,6 +185,7 @@ export async function POST(request: NextRequest) {
           date: deliveryNoteDate,
           status: 'DRAFT',
           salesInvoiceId: salesInvoiceId || null,
+          salesOrderId: salesOrderId || null,
           customerId: resolvedCustomerId,
           warehouseId,
           notes: notes || null,
@@ -180,6 +208,9 @@ export async function POST(request: NextRequest) {
           salesInvoice: {
             select: { id: true, number: true },
           },
+          salesOrder: {
+            select: { id: true, number: true },
+          },
           lines: {
             include: {
               item: {
@@ -189,6 +220,24 @@ export async function POST(request: NextRequest) {
           },
         },
       })
+
+      // If linked to a sales order, update deliveredQty on order lines
+      if (salesOrderId) {
+        for (const line of lines) {
+          const qty = parseFloat(String(line.quantity)) || 0
+          if (qty > 0) {
+            const orderLine = await tx.salesOrderLine.findFirst({
+              where: { salesOrderId, itemId: line.itemId },
+            })
+            if (orderLine) {
+              await tx.salesOrderLine.update({
+                where: { id: orderLine.id },
+                data: { deliveredQty: { increment: qty } },
+              })
+            }
+          }
+        }
+      }
 
       return dn
     })

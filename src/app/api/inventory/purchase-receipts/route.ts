@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
         purchaseInvoice: {
           select: { id: true, number: true },
         },
+        purchaseOrder: {
+          select: { id: true, number: true },
+        },
         _count: {
           select: { lines: true },
         },
@@ -49,7 +52,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requirePermission('inventory.create', request)
     const body = await request.json()
-    const { companyId, purchaseInvoiceId, supplierId, warehouseId, date, notes, lines } = body
+    const { companyId, purchaseInvoiceId, purchaseOrderId, supplierId, warehouseId, date, notes, lines } = body
 
     if (!companyId) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
@@ -78,8 +81,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // If purchaseInvoiceId is provided, auto-fill supplierId and validate items
+    // If purchaseOrderId is provided, validate and auto-fill
     let resolvedSupplierId = supplierId || null
+    let resolvedWarehouseId = warehouseId
+    if (purchaseOrderId) {
+      const purchaseOrder = await db.purchaseOrder.findUnique({
+        where: { id: purchaseOrderId },
+        include: {
+          lines: {
+            select: { id: true, itemId: true, quantity: true, receivedQty: true },
+          },
+        },
+      })
+
+      if (!purchaseOrder || purchaseOrder.companyId !== companyId) {
+        return NextResponse.json(
+          { error: 'أمر الشراء غير موجود أو لا ينتمي لهذه الشركة' },
+          { status: 404 }
+        )
+      }
+
+      // Auto-fill supplierId and warehouseId from the purchase order
+      resolvedSupplierId = purchaseOrder.supplierId
+      resolvedWarehouseId = purchaseOrder.warehouseId
+
+      // Validate that items in purchase receipt lines belong to the purchase order
+      const orderItemIds = new Set(purchaseOrder.lines.map((l) => l.itemId))
+      for (const line of lines) {
+        if (!orderItemIds.has(line.itemId)) {
+          return NextResponse.json(
+            { error: `الصنف ${line.itemId} لا ينتمي لأمر الشراء المحدد` },
+            { status: 400 }
+          )
+        }
+      }
+    }
+
+    // If purchaseInvoiceId is provided, auto-fill supplierId and validate items
     if (purchaseInvoiceId) {
       const purchaseInvoice = await db.purchaseInvoice.findUnique({
         where: { id: purchaseInvoiceId },
@@ -97,8 +135,10 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Auto-fill supplierId from the purchase invoice
-      resolvedSupplierId = purchaseInvoice.supplierId
+      // Auto-fill supplierId from the purchase invoice (only if not already set by purchase order)
+      if (!resolvedSupplierId) {
+        resolvedSupplierId = purchaseInvoice.supplierId
+      }
 
       // Validate that items in purchase receipt lines belong to the purchase invoice
       const invoiceItemIds = new Set(purchaseInvoice.lines.map((l) => l.itemId))
@@ -158,8 +198,9 @@ export async function POST(request: NextRequest) {
           date: receiptDate,
           status: 'DRAFT',
           purchaseInvoiceId: purchaseInvoiceId || null,
+          purchaseOrderId: purchaseOrderId || null,
           supplierId: resolvedSupplierId,
-          warehouseId,
+          warehouseId: resolvedWarehouseId,
           notes: notes || null,
           lines: {
             create: lines.map((line: { itemId: string; quantity: number; purchaseInvoiceLineId?: string; notes?: string }) => ({
@@ -180,6 +221,9 @@ export async function POST(request: NextRequest) {
           purchaseInvoice: {
             select: { id: true, number: true },
           },
+          purchaseOrder: {
+            select: { id: true, number: true },
+          },
           lines: {
             include: {
               item: {
@@ -189,6 +233,24 @@ export async function POST(request: NextRequest) {
           },
         },
       })
+
+      // If linked to a purchase order, update receivedQty on order lines
+      if (purchaseOrderId) {
+        for (const line of lines) {
+          const qty = parseFloat(String(line.quantity)) || 0
+          if (qty > 0) {
+            const orderLine = await tx.purchaseOrderLine.findFirst({
+              where: { purchaseOrderId, itemId: line.itemId },
+            })
+            if (orderLine) {
+              await tx.purchaseOrderLine.update({
+                where: { id: orderLine.id },
+                data: { receivedQty: { increment: qty } },
+              })
+            }
+          }
+        }
+      }
 
       return pr
     })

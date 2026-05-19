@@ -29,6 +29,9 @@ export async function GET(
         purchaseInvoice: {
           select: { id: true, number: true, totalAmount: true, status: true },
         },
+        purchaseOrder: {
+          select: { id: true, number: true },
+        },
         lines: {
           include: {
             item: {
@@ -247,6 +250,7 @@ export async function PUT(
             supplier: { select: { id: true, code: true, nameAr: true, nameEn: true } },
             warehouse: { select: { id: true, code: true, nameAr: true, nameEn: true } },
             purchaseInvoice: { select: { id: true, number: true } },
+            purchaseOrder: { select: { id: true, number: true } },
             lines: {
               include: {
                 item: { select: { id: true, code: true, nameAr: true, nameEn: true } },
@@ -349,6 +353,7 @@ export async function PUT(
               supplier: { select: { id: true, code: true, nameAr: true, nameEn: true } },
               warehouse: { select: { id: true, code: true, nameAr: true, nameEn: true } },
               purchaseInvoice: { select: { id: true, number: true } },
+              purchaseOrder: { select: { id: true, number: true } },
               lines: {
                 include: {
                   item: { select: { id: true, code: true, nameAr: true, nameEn: true } },
@@ -371,6 +376,7 @@ export async function PUT(
           supplier: { select: { id: true, code: true, nameAr: true, nameEn: true } },
           warehouse: { select: { id: true, code: true, nameAr: true, nameEn: true } },
           purchaseInvoice: { select: { id: true, number: true } },
+          purchaseOrder: { select: { id: true, number: true } },
           lines: {
             include: {
               item: { select: { id: true, code: true, nameAr: true, nameEn: true } },

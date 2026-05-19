@@ -143,7 +143,15 @@ export async function PUT(
         }
       }
 
+      // Check if there are linked delivery notes (stock already handled by delivery note)
+      const linkedDeliveryNotes = await db.deliveryNote.findMany({
+        where: { salesInvoiceId: invoice.id, status: 'CONFIRMED' },
+        select: { id: true },
+      })
+      const hasLinkedDeliveryNotes = linkedDeliveryNotes.length > 0
+
       // 2. Process each line: FIFO cost calculation + stock movement + balance update
+      //    ONLY if there are no linked delivery notes (delivery note already handled stock)
       let totalCOGS = 0
       const stockMovements: Array<{
         itemId: string
@@ -153,6 +161,7 @@ export async function PUT(
         totalCost: number
       }> = []
 
+      if (!hasLinkedDeliveryNotes) {
       const fifoUpdates: Array<{
         layerId: string
         consumeQty: number
@@ -319,6 +328,7 @@ export async function PUT(
           })
         }
       }
+      } // end if (!hasLinkedDeliveryNotes)
 
       // 5. Create Journal Entry - look up accounts by companyId + code
       const jePrefix = `JV-${invoice.date.getFullYear()}`

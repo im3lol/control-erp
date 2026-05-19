@@ -97,9 +97,11 @@ import PickListsList from '@/components/inventory/pick-lists-list'
 import SuppliersList from '@/components/purchases/suppliers-list'
 import PurchaseInvoicesList from '@/components/purchases/purchase-invoices-list'
 import PaymentVouchersList from '@/components/purchases/payment-vouchers-list'
+import PurchaseOrdersList from '@/components/purchases/purchase-orders-list'
 import CustomersList from '@/components/sales/customers-list'
 import SalesInvoicesList from '@/components/sales/sales-invoices-list'
 import ReceiptVouchersList from '@/components/sales/receipt-vouchers-list'
+import SalesOrdersList from '@/components/sales/sales-orders-list'
 import TrialBalanceReport from '@/components/reports/trial-balance'
 import BalanceSheetReport from '@/components/reports/balance-sheet'
 import IncomeStatementReport from '@/components/reports/income-statement'
@@ -183,6 +185,7 @@ const navigation: NavItem[] = [
     icon: Truck,
     children: [
       { id: 'suppliers', label: 'الموردين', icon: Building2 },
+      { id: 'purchase-orders', label: 'أوامر الشراء', icon: ClipboardList },
       { id: 'purchase-invoices', label: 'فواتير الشراء', icon: FileText },
       { id: 'payment-vouchers', label: 'سندات الصرف', icon: CreditCard },
     ],
@@ -210,6 +213,7 @@ const navigation: NavItem[] = [
     icon: ShoppingCart,
     children: [
       { id: 'customers', label: 'العملاء', icon: Users },
+      { id: 'sales-orders', label: 'أوامر البيع', icon: ClipboardCheck },
       { id: 'sales-invoices', label: 'فواتير البيع', icon: FileText },
       { id: 'receipt-vouchers', label: 'سندات القبض', icon: Receipt },
     ],
@@ -284,9 +288,11 @@ const viewTitles: Record<string, string> = {
   'pick-lists': 'قوائم التحضير',
   'journal-entries': 'القيود اليومية',
   customers: 'العملاء',
+  'sales-orders': 'أوامر البيع',
   'sales-invoices': 'فواتير البيع',
   'receipt-vouchers': 'سندات القبض',
   suppliers: 'الموردين',
+  'purchase-orders': 'أوامر الشراء',
   'purchase-invoices': 'فواتير الشراء',
   'payment-vouchers': 'سندات الصرف',
   'trial-balance': 'ميزان المراجعة',
@@ -926,6 +932,8 @@ function AppContent() {
       switch (currentView) {
         case 'customers':
           return <CustomersList />
+        case 'sales-orders':
+          return <SalesOrdersList />
         case 'sales-invoices':
           return <SalesInvoicesList />
         case 'receipt-vouchers':
@@ -938,6 +946,8 @@ function AppContent() {
       switch (currentView) {
         case 'suppliers':
           return <SuppliersList />
+        case 'purchase-orders':
+          return <PurchaseOrdersList />
         case 'purchase-invoices':
           return <PurchaseInvoicesList />
         case 'payment-vouchers':
