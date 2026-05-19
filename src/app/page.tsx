@@ -94,12 +94,14 @@ import DeliveryNotesList from '@/components/inventory/delivery-notes-list'
 import PurchaseReceiptsList from '@/components/inventory/purchase-receipts-list'
 import InventoryDashboard from '@/components/inventory/inventory-dashboard'
 import PickListsList from '@/components/inventory/pick-lists-list'
+import PurchasesDashboard from '@/components/purchases/purchases-dashboard'
 import SuppliersList from '@/components/purchases/suppliers-list'
 import PurchaseInvoicesList from '@/components/purchases/purchase-invoices-list'
 import SupplierFormPage from '@/components/purchases/supplier-form-page'
 import PurchaseOrderFormPage from '@/components/purchases/purchase-order-form-page'
 import PurchaseInvoiceFormPage from '@/components/purchases/purchase-invoice-form-page'
 import PurchaseOrdersList from '@/components/purchases/purchase-orders-list'
+import SalesDashboard from '@/components/sales/sales-dashboard'
 import CustomersList from '@/components/sales/customers-list'
 import CustomerFormPage from '@/components/sales/customer-form-page'
 import SalesInvoicesList from '@/components/sales/sales-invoices-list'
@@ -938,6 +940,7 @@ function AppContent() {
       }
     }
     if (currentModule === 'sales') {
+      if (!currentView) return <SalesDashboard />
       switch (currentView) {
         case 'customers':
           return <CustomersList />
@@ -958,6 +961,7 @@ function AppContent() {
       }
     }
     if (currentModule === 'purchases') {
+      if (!currentView) return <PurchasesDashboard />
       switch (currentView) {
         case 'suppliers':
           return <SuppliersList />

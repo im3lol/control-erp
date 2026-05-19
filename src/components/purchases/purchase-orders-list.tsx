@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, FileText, Loader2, CheckCircle,
-  Eye, XCircle, PackageCheck,
+  Eye, XCircle, PackageCheck, Receipt,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -273,6 +273,35 @@ export default function PurchaseOrdersList() {
     }
   }
 
+  // ── Create Purchase Invoice from confirmed order ──
+
+  const handleCreatePurchaseInvoice = async (order: PurchaseOrder) => {
+    try {
+      const res = await fetch(`/api/purchases/orders/${order.id}?companyId=${companyId}`)
+      if (!res.ok) {
+        toast.error('فشل في تحميل بيانات أمر الشراء')
+        return
+      }
+      const fullOrder = await res.json()
+
+      localStorage.setItem('pendingPurchaseInvoice', JSON.stringify({
+        supplierId: fullOrder.supplierId,
+        warehouseId: fullOrder.warehouseId,
+        notes: `من أمر شراء ${fullOrder.number}`,
+        lines: fullOrder.lines.map((line: { itemId: string; quantity: number }) => ({
+          itemId: line.itemId,
+          quantity: line.quantity,
+        })),
+      }))
+
+      setModule('purchases')
+      setView('purchase-invoice-form')
+      toast.success('سيتم إنشاء فاتورة شراء من أمر الشراء')
+    } catch {
+      toast.error('حدث خطأ أثناء تجهيز فاتورة الشراء')
+    }
+  }
+
   // ── Received Qty Helpers ──
 
   const getReceivedInfo = (order: PurchaseOrder) => {
@@ -474,6 +503,15 @@ export default function PurchaseOrdersList() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  onClick={() => handleCreatePurchaseInvoice(ord)}
+                                  className="h-8 w-8 text-slate-500 hover:text-orange-600 hover:bg-orange-50"
+                                  title="إنشاء فاتورة شراء"
+                                >
+                                  <Receipt className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
                                   onClick={() => openConfirmDialog(ord.id, 'cancel')}
                                   className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
                                   title="إلغاء"
@@ -623,16 +661,28 @@ export default function PurchaseOrdersList() {
               )}
 
               {detailOrder.status === 'CONFIRMED' && (
-                <Button
-                  onClick={() => {
-                    setDetailDialogOpen(false)
-                    handleCreatePurchaseReceipt(detailOrder)
-                  }}
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white gap-2"
-                >
-                  <PackageCheck className="h-4 w-4" />
-                  إنشاء إذن استلام مشتريات
-                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => {
+                      setDetailDialogOpen(false)
+                      handleCreatePurchaseReceipt(detailOrder)
+                    }}
+                    className="flex-1 bg-teal-600 hover:bg-teal-700 text-white gap-2"
+                  >
+                    <PackageCheck className="h-4 w-4" />
+                    إنشاء إذن استلام
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setDetailDialogOpen(false)
+                      handleCreatePurchaseInvoice(detailOrder)
+                    }}
+                    className="flex-1 bg-orange-600 hover:bg-orange-700 text-white gap-2"
+                  >
+                    <Receipt className="h-4 w-4" />
+                    إنشاء فاتورة شراء
+                  </Button>
+                </div>
               )}
 
               {detailOrder.notes && (

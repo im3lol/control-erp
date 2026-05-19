@@ -11,6 +11,7 @@ import {
   Eye,
   Truck,
   X,
+  Receipt,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -301,6 +302,25 @@ export default function SalesOrdersList() {
     toast.success('تم تحويل أمر البيع إلى إذن صرف')
   }
 
+  // Create Sales Invoice from confirmed order
+  const handleCreateSalesInvoice = (order: SalesOrder) => {
+    // Store order data in localStorage for the sales invoice to pick up
+    localStorage.setItem(
+      'pendingSalesInvoice',
+      JSON.stringify({
+        customerId: order.customerId,
+        notes: `من أمر بيع ${order.number}`,
+        lines: order.lines.map((l) => ({
+          itemId: l.itemId,
+          quantity: l.quantity,
+        })),
+      })
+    )
+    useAppStore.getState().setModule('sales')
+    useAppStore.getState().setView('sales-invoice-form')
+    toast.success('سيتم إنشاء فاتورة بيع من أمر البيع')
+  }
+
   // Calculate delivered percentage for an order
   const getDeliveredInfo = (order: SalesOrder) => {
     // We only have this info from the detail endpoint
@@ -541,6 +561,15 @@ export default function SalesOrdersList() {
                                   title="إنشاء إذن صرف"
                                 >
                                   <Truck className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleCreateSalesInvoice(order)}
+                                  className="h-8 w-8 text-slate-500 hover:text-orange-600 hover:bg-orange-50"
+                                  title="إنشاء فاتورة بيع"
+                                >
+                                  <Receipt className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -810,16 +839,28 @@ export default function SalesOrdersList() {
                 {/* Actions in detail dialog */}
                 <div className="flex justify-end gap-3 pt-2">
                   {detailOrder.status === 'CONFIRMED' && (
-                    <Button
-                      onClick={() => {
-                        handleCreateDeliveryNote(detailOrder)
-                        setDetailDialogOpen(false)
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-                    >
-                      <Truck className="h-4 w-4" />
-                      إنشاء إذن صرف
-                    </Button>
+                    <>
+                      <Button
+                        onClick={() => {
+                          handleCreateDeliveryNote(detailOrder)
+                          setDetailDialogOpen(false)
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                      >
+                        <Truck className="h-4 w-4" />
+                        إنشاء إذن صرف
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          handleCreateSalesInvoice(detailOrder)
+                          setDetailDialogOpen(false)
+                        }}
+                        className="bg-orange-600 hover:bg-orange-700 text-white gap-2"
+                      >
+                        <Receipt className="h-4 w-4" />
+                        إنشاء فاتورة بيع
+                      </Button>
+                    </>
                   )}
                   <Button variant="outline" onClick={() => setDetailDialogOpen(false)}>
                     إغلاق

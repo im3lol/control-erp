@@ -667,3 +667,173 @@ Stage Summary:
 - All form pages support edit mode via editingDocId from store
 - Supplier form page bug fixed (editingId → editingDocId)
 - Store types updated to include all view IDs
+
+---
+Task ID: 7
+Agent: API Agent
+Task: Create Purchases Analytics API endpoint
+
+Work Log:
+- Created `src/app/api/purchases/analytics/route.ts` - GET endpoint for Purchases module dashboard analytics
+  - Accepts `companyId` as a query parameter (required)
+  - Requires `purchases.view` permission via requirePermission
+  - Returns comprehensive analytics data as JSON with status 200
+  - Data returned:
+    - `supplierCount`: Total number of suppliers for the company
+    - `activeSupplierCount`: Number of active suppliers (isActive=true)
+    - `totalPurchaseOrders`: Total purchase orders count
+    - `pendingPurchaseOrders`: Purchase orders with DRAFT status
+    - `confirmedPurchaseOrders`: Purchase orders with CONFIRMED status
+    - `totalPurchaseInvoices`: Total purchase invoices count
+    - `pendingPurchaseInvoices`: Purchase invoices with DRAFT status
+    - `totalPurchaseAmount`: Sum of totalAmount from CONFIRMED invoices
+    - `totalPaidAmount`: Sum of paidAmount from CONFIRMED invoices
+    - `totalBalanceDue`: Sum of balanceDue from CONFIRMED invoices
+    - `recentOrders`: Last 10 purchase orders with id, number, supplierName, date, totalAmount, status
+    - `recentInvoices`: Last 10 purchase invoices with id, number, supplierName, date, totalAmount, status, balanceDue
+    - `topSuppliers`: Top 10 suppliers by confirmed invoice totalAmount with supplierId, supplierName, totalAmount, invoiceCount
+    - `monthlyPurchases`: Monthly aggregation (last 12 months) with month (YYYY-MM), totalAmount, invoiceCount
+  - Uses Promise.all for parallel execution of independent count queries
+  - Uses Prisma aggregate for financial sums (totalAmount, paidAmount, balanceDue)
+  - Uses Prisma groupBy for top suppliers by supplierId
+  - Monthly aggregation done in JavaScript (fetch + Map grouping) for SQLite compatibility
+  - All queries filtered by companyId
+  - Follows existing API patterns: requirePermission, companyId validation, Arabic error messages, error handling
+- Lint passes cleanly
+---
+Task ID: 8
+Agent: API Agent
+Task: Create Sales Analytics API endpoint
+
+Work Log:
+- Created `src/app/api/sales/analytics/route.ts` - GET endpoint for Sales module dashboard analytics
+  - Accepts `companyId` as a required query parameter
+  - Returns comprehensive analytics data including:
+    - `customerCount`: Total number of customers for the company
+    - `activeCustomerCount`: Number of active customers (isActive: true)
+    - `totalSalesOrders`: Total sales orders count
+    - `pendingSalesOrders`: Count of DRAFT status sales orders
+    - `confirmedSalesOrders`: Count of CONFIRMED status sales orders
+    - `totalSalesInvoices`: Total sales invoices count
+    - `pendingSalesInvoices`: Count of DRAFT status sales invoices
+    - `totalSalesAmount`: Sum of totalAmount from all CONFIRMED/PAID invoices
+    - `totalPaidAmount`: Sum of paidAmount from all CONFIRMED/PAID invoices
+    - `totalBalanceDue`: Sum of balanceDue from all CONFIRMED/PAID invoices
+    - `recentOrders`: Last 5 orders with id, number, customerName, date, totalAmount, status
+    - `recentInvoices`: Last 5 invoices with id, number, customerName, date, totalAmount, status, balanceDue
+    - `topCustomers`: Top 10 customers by totalAmount from confirmed/paid invoices, with invoiceCount
+    - `monthlySales`: Monthly aggregation of sales (month, totalAmount, invoiceCount) from confirmed/paid invoices
+  - All queries filter by companyId
+  - Uses Promise.all for parallel query execution (12 independent queries)
+  - Financial totals computed by fetching confirmed/paid invoices and summing in-memory
+  - Top customers aggregated using Map from confirmed/paid invoices
+  - Monthly sales aggregated using Map with YYYY-MM key format, sorted chronologically
+  - All monetary values rounded to 2 decimal places
+  - Error handling with Arabic error message for internal errors
+  - Follows same pattern as inventory analytics endpoint
+- Lint passes cleanly
+
+
+---
+Task ID: 4
+Agent: UI Agent
+Task: Create Purchases Dashboard component (لوحة تحكم المشتريات)
+
+Work Log:
+- Created `src/components/purchases/purchases-dashboard.tsx` - Full dashboard page for the Purchases module
+- Component features:
+  - 'use client' component that fetches data from `/api/purchases/analytics?companyId=${companyId}`
+  - **Stat Cards** (4-card grid): إجمالي المشتريات (TrendingUp, orange), الموردين (Building2, purple), أوامر شراء معلقة (ClipboardList, amber), فواتير معلقة (FileText, red)
+    - Alert badges for pending orders/invoices with animate-pulse
+  - **Quick Actions** (5-column grid on desktop, 2 on mobile): الموردين, أمر شراء جديد, فاتورة شراء جديدة, أوامر الشراء, فواتير الشراء
+    - Each with color-coded icon, label, description, and hover animation
+    - Uses setView() for navigation
+  - **Analytics Row** (2-column):
+    - Left: أعلى الموردين (Top Suppliers) - ranked list with bar chart visualization, color-coded progress bars, invoice count per supplier
+    - Right: آخر أوامر الشراء (Recent Purchase Orders) - list with status badges, supplier name, date, amount
+  - **Financial Summary Card** (3-column grid):
+    - إجمالي المشتريات (Total Purchase Amount) - orange theme
+    - إجمالي المدفوع (Total Paid) - emerald theme with payment progress bar
+    - المتبقي (Balance Due) - red theme when >0 with AlertTriangle icon, green checkmark when 0
+  - **Bottom Row** (2-column):
+    - Left: آخر الفواتير (Recent Invoices) - list with status badges, balance due shown in red
+    - Right: المشتريات الشهرية (Monthly Purchases) - bar chart of monthly amounts with invoice counts
+  - Loading skeleton states for all sections
+  - Empty states with relevant icons
+  - max-h-72 overflow-y-auto for scrollable lists
+  - Arabic labels throughout
+  - Same styling patterns as inventory dashboard (Card with border shadow-sm, rounded-xl icons, color-coded sections, progress bars)
+  - Icons imported from lucide-react: Building2, ClipboardList, FileText, PackageCheck, Receipt, TrendingUp, AlertTriangle, ArrowRight, Loader2
+  - Uses useAppStore for companyId and setView
+  - Uses formatCurrency, formatDate, getStatusColor, getStatusLabel from erp-utils
+- Lint passes cleanly
+
+---
+Task ID: 5
+Agent: UI Agent
+Task: Create Sales Dashboard component (لوحة تحكم المبيعات)
+
+Work Log:
+- Created `src/components/sales/sales-dashboard.tsx` - Full dashboard page for the Sales module (المبيعات)
+  - Follows the exact same styling patterns as the Inventory Dashboard (inventory-dashboard.tsx)
+  - 'use client' component that fetches data from `/api/sales/analytics?companyId=${companyId}`
+  - Stat Cards (4 cards in a grid):
+    - إجمالي المبيعات (totalSalesAmount) - TrendingUp icon, emerald color scheme, currency formatted
+    - العملاء (customerCount) - Users icon, teal color scheme
+    - أوامر بيع معلقة (pendingSalesOrders) - ClipboardCheck icon, amber color scheme, alert badge when > 0
+    - فواتير معلقة (pendingSalesInvoices) - FileText icon, red color scheme, alert badge when > 0
+  - Quick Action Shortcuts (5 columns on desktop, 2 on mobile):
+    - العملاء → viewId: 'customers' - Users icon, emerald color
+    - أمر بيع جديد → viewId: 'sales-order-form' - ClipboardCheck icon, amber color
+    - فاتورة بيع جديدة → viewId: 'sales-invoice-form' - FileText icon, orange color
+    - أوامر البيع → viewId: 'sales-orders' - ShoppingCart icon, teal color
+    - فواتير البيع → viewId: 'sales-invoices' - Receipt icon, purple color
+  - Analytics Row (2 cards side by side):
+    - Left: أعلى العملاء (Top Customers) - list with bar chart visualization, progress bars, invoice count per customer
+    - Right: آخر أوامر البيع (Recent Sales Orders) - list with status badges, amount, date
+  - Financial Summary Card:
+    - إجمالي المبيعات (Total Sales Amount) - emerald color scheme
+    - إجمالي المحصل (Total Paid/Collected) - teal color scheme
+    - المتبقي (Balance Due) - red color when > 0 with AlertTriangle icon and "مبالغ مستحقة" warning
+  - Bottom Row (2 cards side by side):
+    - Left: آخر الفواتير (Recent Invoices) - list with status badges and balanceDue shown in red
+    - Right: المبيعات الشهرية (Monthly Sales) - bar chart with Arabic month names, colored bars, invoice count
+  - Loading skeleton states matching inventory dashboard pattern
+  - All labels in Arabic
+  - RTL layout, useAppStore for companyId and setView
+  - formatCurrency, formatDate from erp-utils
+  - Color-coded sections, rounded-xl icons, max-h-72 overflow-y-auto for scrollable lists
+  - hover:shadow-md transition effects on stat cards and action buttons
+- Lint passes cleanly
+
+Stage Summary:
+- Sales Dashboard component created with all 6 required sections
+- Fetches from existing `/api/sales/analytics` endpoint
+- All Arabic labels, consistent styling with inventory dashboard
+- Financial summary highlights outstanding amounts in red
+- Top customers shown with bar chart visualization
+- Monthly sales displayed with Arabic month names
+---
+Task ID: 10
+Agent: Main Agent
+Task: Add Purchases and Sales dashboards with analytics, enhance document linking
+
+Work Log:
+- Created `/src/app/api/purchases/analytics/route.ts` - GET endpoint for purchases dashboard analytics (supplier count, order counts, invoice counts, financial totals, recent orders/invoices, top suppliers, monthly purchases)
+- Created `/src/app/api/sales/analytics/route.ts` - GET endpoint for sales dashboard analytics (customer count, order counts, invoice counts, financial totals, recent orders/invoices, top customers, monthly sales)
+- Created `/src/components/purchases/purchases-dashboard.tsx` - Full dashboard with stat cards, quick action shortcuts, top suppliers chart, recent orders, financial summary, recent invoices, monthly purchases chart
+- Created `/src/components/sales/sales-dashboard.tsx` - Full dashboard with stat cards, quick action shortcuts, top customers chart, recent orders, financial summary, recent invoices, monthly sales chart
+- Updated `/src/app/page.tsx` - Added PurchasesDashboard and SalesDashboard imports, rendered when module is selected without a view
+- Added "Create Purchase Invoice from Purchase Order" button in purchase-orders-list.tsx (both in table actions and detail dialog)
+- Added "Create Sales Invoice from Sales Order" button in sales-orders-list.tsx (both in table actions and detail dialog)
+- Removed unused payment-vouchers-list.tsx component from Purchases
+- All lint checks pass, dev server running
+
+Stage Summary:
+- Purchases and Sales modules now have rich dashboards with analytics (similar to Inventory Dashboard)
+- Document linking enhanced: Purchase Order → Purchase Invoice, Sales Order → Sales Invoice
+- Quick action shortcuts on dashboards for fast navigation
+- Financial summaries with total amounts, paid amounts, and balance due
+- Monthly trend charts for purchases and sales
+- Top suppliers/customers visualization with progress bars
+
