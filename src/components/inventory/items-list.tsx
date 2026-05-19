@@ -13,6 +13,10 @@ import {
   X,
   Star,
   Barcode,
+  FileText,
+  Receipt,
+  ArrowLeftRight,
+  Sliders,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -80,10 +84,17 @@ interface ItemCode {
   isPrimary: boolean
 }
 
+interface ItemStats {
+  salesCount: number
+  purchaseCount: number
+  movementCount: number
+  adjustmentCount: number
+}
+
 interface Item {
   id: string
   code: string
-  nameAr: string
+  nameAr: string | null
   nameEn: string | null
   categoryId: string | null
   uomId: string | null
@@ -99,6 +110,7 @@ interface Item {
   codes?: ItemCode[]
   primaryCode?: string | null
   _count?: { stockMovements: number }
+  _stats?: ItemStats
 }
 
 interface ItemFormData {
@@ -158,6 +170,9 @@ const CODE_TYPE_SHORT: Record<string, string> = {
 
 export default function ItemsList() {
   const companyId = useAppStore(state => state.currentCompanyId)
+  const setModule = useAppStore(state => state.setModule)
+  const setView = useAppStore(state => state.setView)
+  const setItemFilter = useAppStore(state => state.setItemFilter)
   const [items, setItems] = useState<Item[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [uoms, setUoms] = useState<UOM[]>([])
@@ -266,7 +281,7 @@ export default function ItemsList() {
   const filteredItems = items.filter((item) => {
     const matchesSearch =
       !searchTerm ||
-      item.nameAr.includes(searchTerm) ||
+      (item.nameAr && item.nameAr.includes(searchTerm)) ||
       item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.nameEn && item.nameEn.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (item.codes && item.codes.some((c) => c.code.toLowerCase().includes(searchTerm.toLowerCase())))
@@ -279,7 +294,13 @@ export default function ItemsList() {
 
   const handleOpenAdd = () => {
     setEditingId(null)
-    setFormData(initialFormData)
+    // Auto-select PCS (Piece) as default UOM if available
+    const pcsUom = uoms.find((u) => u.code === 'PCS')
+    const defaultFormData: ItemFormData = {
+      ...initialFormData,
+      uomId: pcsUom?.id || '',
+    }
+    setFormData(defaultFormData)
     setItemCodes([{ codeType: 'SKU', code: '', isPrimary: true }])
     setImagePreview(null)
     setImageFile(null)
@@ -290,7 +311,7 @@ export default function ItemsList() {
     setEditingId(item.id)
     setFormData({
       code: item.code,
-      nameAr: item.nameAr,
+      nameAr: item.nameAr || '',
       nameEn: item.nameEn || '',
       categoryId: item.categoryId || '',
       uomId: item.uomId || '',
@@ -324,6 +345,14 @@ export default function ItemsList() {
     const codes = await fetchItemCodes(item.id)
     setDetailItem(item)
     setDetailCodes(codes)
+  }
+
+  // Navigate to related records filtered by this item
+  const handleNavigateToRelated = (module: 'sales' | 'purchases' | 'inventory', view: string, itemId: string) => {
+    setDetailItem(null)
+    setItemFilter(itemId)
+    setModule(module)
+    setView(view)
   }
 
   // ── Image handling ──
@@ -405,22 +434,20 @@ export default function ItemsList() {
 
   // ── Submit ──
   const handleSubmit = async () => {
-    if (!formData.code.trim() || !formData.nameAr.trim()) {
-      toast.error('يرجى ملء الحقول المطلوبة')
+    if (!formData.code.trim()) {
+      toast.error('يرجى إدخال كود الصنف')
       return
     }
 
     setSubmitting(true)
     try {
       // 1. Save item
-      const url = editingId
-        ? `/api/inventory/items/${editingId}?companyId=${companyId}`
-        : `/api/inventory/items?companyId=${companyId}`
+      const url = '/api/inventory/items'
       const method = editingId ? 'PUT' : 'POST'
 
       const payload = {
         code: formData.code,
-        nameAr: formData.nameAr,
+        nameAr: formData.nameAr || null,
         nameEn: formData.nameEn || null,
         categoryId: formData.categoryId || null,
         uomId: formData.uomId || null,
@@ -430,6 +457,7 @@ export default function ItemsList() {
         maxStock: formData.maxStock ? parseFloat(formData.maxStock) : null,
         description: formData.description || null,
         isActive: formData.isActive,
+        ...(editingId ? { id: editingId } : {}),
       }
 
       const res = await fetch(url, {
@@ -514,7 +542,11 @@ export default function ItemsList() {
   const handleDelete = async () => {
     if (!deletingId) return
     try {
-      const res = await fetch(`/api/inventory/items/${deletingId}?companyId=${companyId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/inventory/items?companyId=${companyId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deletingId, companyId }),
+      })
       if (res.ok) {
         toast.success('تم حذف الصنف بنجاح')
         fetchItems()
@@ -650,7 +682,7 @@ export default function ItemsList() {
                           {item.image ? (
                             <img
                               src={item.image}
-                              alt={item.nameAr}
+                              alt={item.nameAr || item.code}
                               className="h-8 w-8 rounded-md object-cover border border-slate-100"
                             />
                           ) : (
@@ -677,7 +709,7 @@ export default function ItemsList() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="font-medium">{item.nameAr}</TableCell>
+                        <TableCell className="font-medium">{item.nameAr || item.nameEn || item.code}</TableCell>
                         <TableCell className="text-slate-500">
                           {getCategoryName(item.categoryId)}
                         </TableCell>
@@ -810,7 +842,7 @@ export default function ItemsList() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="item-nameAr">
-                  الاسم عربي <span className="text-red-500">*</span>
+                  الاسم عربي
                 </Label>
                 <Input
                   id="item-nameAr"
@@ -1045,7 +1077,7 @@ export default function ItemsList() {
                   {detailItem.image ? (
                     <img
                       src={detailItem.image}
-                      alt={detailItem.nameAr}
+                      alt={detailItem.nameAr || detailItem.code}
                       className="h-12 w-12 rounded-lg object-cover border border-slate-100"
                     />
                   ) : (
@@ -1053,7 +1085,7 @@ export default function ItemsList() {
                       <Package className="h-6 w-6 text-slate-300" />
                     </div>
                   )}
-                  {detailItem.nameAr}
+                  {detailItem.nameAr || detailItem.nameEn || detailItem.code}
                 </DialogTitle>
                 <DialogDescription>
                   {detailItem.code} {detailItem.nameEn && `| ${detailItem.nameEn}`}
@@ -1065,7 +1097,7 @@ export default function ItemsList() {
                 <div className="flex justify-center mb-4">
                   <img
                     src={detailItem.image}
-                    alt={detailItem.nameAr}
+                    alt={detailItem.nameAr || detailItem.code}
                     className="h-48 w-48 rounded-xl object-cover border border-slate-100 shadow-sm"
                   />
                 </div>
@@ -1109,6 +1141,60 @@ export default function ItemsList() {
                     <p className="font-medium">{detailItem.description}</p>
                   </div>
                 )}
+              </div>
+
+              {/* Related Records */}
+              <div className="border-t pt-4 mt-4">
+                <Label className="text-sm font-semibold mb-3 block">السجلات المرتبطة</Label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {/* Sales */}
+                  <button
+                    onClick={() => handleNavigateToRelated('sales', 'sales-invoices', detailItem.id)}
+                    className="flex flex-col items-center gap-2 p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100 hover:border-emerald-300 transition-colors cursor-pointer group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
+                      <FileText className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <span className="text-xs text-emerald-700 font-medium">مبيعات</span>
+                    <span className="text-2xl font-bold text-emerald-700">{detailItem._stats?.salesCount ?? 0}</span>
+                  </button>
+
+                  {/* Purchases */}
+                  <button
+                    onClick={() => handleNavigateToRelated('purchases', 'purchase-invoices', detailItem.id)}
+                    className="flex flex-col items-center gap-2 p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100 hover:border-emerald-300 transition-colors cursor-pointer group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
+                      <Receipt className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <span className="text-xs text-emerald-700 font-medium">مشتريات</span>
+                    <span className="text-2xl font-bold text-emerald-700">{detailItem._stats?.purchaseCount ?? 0}</span>
+                  </button>
+
+                  {/* Movements */}
+                  <button
+                    onClick={() => handleNavigateToRelated('inventory', 'stock-movements', detailItem.id)}
+                    className="flex flex-col items-center gap-2 p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100 hover:border-emerald-300 transition-colors cursor-pointer group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
+                      <ArrowLeftRight className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <span className="text-xs text-emerald-700 font-medium">حركة</span>
+                    <span className="text-2xl font-bold text-emerald-700">{detailItem._stats?.movementCount ?? 0}</span>
+                  </button>
+
+                  {/* Adjustments */}
+                  <button
+                    onClick={() => handleNavigateToRelated('inventory', 'stock-movements', detailItem.id)}
+                    className="flex flex-col items-center gap-2 p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100 hover:border-emerald-300 transition-colors cursor-pointer group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
+                      <Sliders className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <span className="text-xs text-emerald-700 font-medium">تسوية</span>
+                    <span className="text-2xl font-bold text-emerald-700">{detailItem._stats?.adjustmentCount ?? 0}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Product Codes */}

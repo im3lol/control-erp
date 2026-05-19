@@ -82,6 +82,7 @@ import WarehousesList from '@/components/inventory/warehouses-list'
 import CategoriesList from '@/components/inventory/categories-list'
 import ItemsList from '@/components/inventory/items-list'
 import StockMovementsList from '@/components/inventory/stock-movements-list'
+import StockTransfersList from '@/components/inventory/stock-transfers-list'
 import ItemBalancesList from '@/components/inventory/item-balances-list'
 import SuppliersList from '@/components/purchases/suppliers-list'
 import PurchaseInvoicesList from '@/components/purchases/purchase-invoices-list'
@@ -178,6 +179,7 @@ const navigation: NavItem[] = [
       { id: 'items', label: 'الأصناف', icon: Package },
       { id: 'categories', label: 'الفئات', icon: Tags },
       { id: 'stock-movements', label: 'حركات المخزن', icon: ArrowLeftRight },
+      { id: 'stock-transfers', label: 'تحويلات المخزون', icon: ArrowLeftRight },
       { id: 'item-balances', label: 'أرصدة الأصناف', icon: Scale },
     ],
   },
@@ -258,6 +260,7 @@ const viewTitles: Record<string, string> = {
   items: 'الأصناف',
   categories: 'الفئات',
   'stock-movements': 'حركات المخزن',
+  'stock-transfers': 'تحويلات المخزون',
   'item-balances': 'أرصدة الأصناف',
   'journal-entries': 'القيود اليومية',
   customers: 'العملاء',
@@ -868,6 +871,8 @@ function AppContent() {
           return <ItemsList />
         case 'stock-movements':
           return <StockMovementsList />
+        case 'stock-transfers':
+          return <StockTransfersList />
         case 'item-balances':
           return <ItemBalancesList />
         default:

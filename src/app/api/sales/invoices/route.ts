@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const customerId = searchParams.get('customerId')
     const fromDate = searchParams.get('fromDate')
     const toDate = searchParams.get('toDate')
+    const itemId = searchParams.get('itemId')
 
     const where: Record<string, unknown> = { companyId }
 
@@ -31,6 +32,9 @@ export async function GET(request: NextRequest) {
         ...(fromDate && { gte: new Date(fromDate) }),
         ...(toDate && { lte: new Date(toDate) }),
       }
+    }
+    if (itemId) {
+      where.lines = { some: { itemId } }
     }
 
     const invoices = await db.salesInvoice.findMany({

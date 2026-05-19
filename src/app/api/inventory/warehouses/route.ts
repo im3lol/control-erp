@@ -2,12 +2,37 @@ import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/auth-guard'
 
+// Build a nested tree from flat warehouse list
+function buildTree(warehouses: any[]): any[] {
+  const map = new Map<string, any>()
+  const roots: any[] = []
+
+  // First pass: create map entries
+  for (const wh of warehouses) {
+    map.set(wh.id, { ...wh, children: [] })
+  }
+
+  // Second pass: build tree
+  for (const wh of warehouses) {
+    const node = map.get(wh.id)!
+    if (wh.parentId && map.has(wh.parentId)) {
+      map.get(wh.parentId)!.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+
+  return roots
+}
+
 // GET /api/inventory/warehouses - List all warehouses for a company
 export async function GET(request: NextRequest) {
   try {
     const user = await requirePermission('inventory.view', request)
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
+    const view = searchParams.get('view') // 'tree' or 'list' (default: list)
+
     if (!companyId) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
     }
@@ -15,15 +40,24 @@ export async function GET(request: NextRequest) {
     const warehouses = await db.warehouse.findMany({
       where: { companyId },
       include: {
+        parent: {
+          select: { id: true, code: true, nameAr: true, type: true },
+        },
         _count: {
           select: {
             itemBalances: true,
             stockMovements: true,
+            children: true,
           },
         },
       },
       orderBy: { code: 'asc' },
     })
+
+    if (view === 'tree') {
+      const tree = buildTree(warehouses)
+      return NextResponse.json(tree)
+    }
 
     return NextResponse.json(warehouses)
   } catch (error) {
@@ -43,15 +77,15 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requirePermission('inventory.create', request)
     const body = await request.json()
-    const { companyId, code, nameAr, nameEn, location, manager, isActive } = body
+    const { companyId, code, nameAr, nameEn, type, parentId, location, manager, isActive } = body
 
     if (!companyId) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
     }
 
-    if (!code || !nameAr) {
+    if (!code) {
       return NextResponse.json(
-        { error: 'code and nameAr are required' },
+        { error: 'code is required' },
         { status: 400 }
       )
     }
@@ -67,15 +101,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate parentId if provided
+    if (parentId) {
+      const parent = await db.warehouse.findUnique({ where: { id: parentId } })
+      if (!parent || parent.companyId !== companyId) {
+        return NextResponse.json(
+          { error: 'Invalid parent location' },
+          { status: 400 }
+        )
+      }
+    }
+
     const warehouse = await db.warehouse.create({
       data: {
         companyId,
         code,
-        nameAr,
+        nameAr: nameAr || '',
         nameEn,
+        type: type || 'WAREHOUSE',
+        parentId: parentId || null,
         location,
         manager,
         isActive: isActive ?? true,
+      },
+      include: {
+        parent: {
+          select: { id: true, code: true, nameAr: true, type: true },
+        },
       },
     })
 
@@ -87,138 +139,6 @@ export async function POST(request: NextRequest) {
     console.error('Create warehouse error:', error)
     return NextResponse.json(
       { error: 'Failed to create warehouse' },
-      { status: 500 }
-    )
-  }
-}
-
-// PUT /api/inventory/warehouses - Update warehouse
-export async function PUT(request: NextRequest) {
-  try {
-    const user = await requirePermission('inventory.edit', request)
-    const body = await request.json()
-    const { companyId, id, code, nameAr, nameEn, location, manager, isActive } = body
-
-    if (!companyId) {
-      return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
-    }
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id is required' },
-        { status: 400 }
-      )
-    }
-
-    const existing = await db.warehouse.findUnique({ where: { id } })
-    if (!existing) {
-      return NextResponse.json(
-        { error: 'Warehouse not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify the warehouse belongs to the company
-    if (existing.companyId !== companyId) {
-      return NextResponse.json(
-        { error: 'Warehouse does not belong to this company' },
-        { status: 403 }
-      )
-    }
-
-    // If code is being changed, check for uniqueness within company
-    if (code && code !== existing.code) {
-      const codeExists = await db.warehouse.findUnique({
-        where: { companyId_code: { companyId, code } },
-      })
-      if (codeExists) {
-        return NextResponse.json(
-          { error: `Warehouse with code "${code}" already exists in this company` },
-          { status: 409 }
-        )
-      }
-    }
-
-    const warehouse = await db.warehouse.update({
-      where: { id },
-      data: {
-        ...(code !== undefined && { code }),
-        ...(nameAr !== undefined && { nameAr }),
-        ...(nameEn !== undefined && { nameEn }),
-        ...(location !== undefined && { location }),
-        ...(manager !== undefined && { manager }),
-        ...(isActive !== undefined && { isActive }),
-      },
-    })
-
-    return NextResponse.json(warehouse)
-  } catch (error) {
-    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
-      return NextResponse.json({ error: error.message }, { status: 403 })
-    }
-    console.error('Update warehouse error:', error)
-    return NextResponse.json(
-      { error: 'Failed to update warehouse' },
-      { status: 500 }
-    )
-  }
-}
-
-// DELETE /api/inventory/warehouses - Delete warehouse
-export async function DELETE(request: NextRequest) {
-  try {
-    const user = await requirePermission('inventory.delete', request)
-    const body = await request.json()
-    const { companyId, id } = body
-
-    if (!companyId) {
-      return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
-    }
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id is required' },
-        { status: 400 }
-      )
-    }
-
-    const existing = await db.warehouse.findUnique({ where: { id } })
-    if (!existing) {
-      return NextResponse.json(
-        { error: 'Warehouse not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify the warehouse belongs to the company
-    if (existing.companyId !== companyId) {
-      return NextResponse.json(
-        { error: 'Warehouse does not belong to this company' },
-        { status: 403 }
-      )
-    }
-
-    // Check if warehouse has stock movements
-    const movementsCount = await db.stockMovement.count({
-      where: { warehouseId: id },
-    })
-    if (movementsCount > 0) {
-      return NextResponse.json(
-        { error: `Cannot delete: warehouse has ${movementsCount} stock movement(s)` },
-        { status: 400 }
-      )
-    }
-
-    await db.warehouse.delete({ where: { id } })
-
-    return NextResponse.json({ message: 'Warehouse deleted successfully' })
-  } catch (error) {
-    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
-      return NextResponse.json({ error: error.message }, { status: 403 })
-    }
-    console.error('Delete warehouse error:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete warehouse' },
       { status: 500 }
     )
   }

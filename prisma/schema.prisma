@@ -76,6 +76,7 @@ model Company {
   investments      Investment[]
   profitDistributions ProfitDistribution[]
   withdrawals      Withdrawal[]
+  stockTransfers   StockTransfer[]
 }
 
 model CompanyUser {
@@ -140,17 +141,23 @@ model Warehouse {
   code      String
   nameAr    String
   nameEn    String?
+  type      String   @default("WAREHOUSE") // WAREHOUSE, ZONE, RACK, SHELF, BOX
+  parentId  String?
   location  String?
   manager   String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  stockMovements  StockMovement[]
-  itemBalances    ItemBalance[]
-  fifoLayers      FifoLayer[]
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent           Warehouse?       @relation("WarehouseHierarchy", fields: [parentId], references: [id])
+  children         Warehouse[]      @relation("WarehouseHierarchy")
+  stockMovements   StockMovement[]
+  itemBalances     ItemBalance[]
+  fifoLayers       FifoLayer[]
   purchaseInvoices PurchaseInvoice[]
+  transferFrom     StockTransfer[]  @relation("TransferFrom")
+  transferTo       StockTransfer[]  @relation("TransferTo")
 
   @@unique([companyId, code])
 }
@@ -178,7 +185,7 @@ model Item {
   id          String   @id @default(cuid())
   companyId   String
   code        String
-  nameAr      String
+  nameAr      String?  // Optional - not mandatory
   nameEn      String?
   categoryId  String?
   uomId       String?
@@ -201,6 +208,7 @@ model Item {
   salesLines      SalesInvoiceLine[]
   purchaseLines   PurchaseInvoiceLine[]
   codes           ItemCode[]
+  transferLines   StockTransferLine[]
 
   @@unique([companyId, code])
 }
@@ -269,6 +277,37 @@ model StockMovement {
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
 
   @@unique([companyId, number])
+}
+
+model StockTransfer {
+  id          String   @id @default(cuid())
+  companyId   String
+  number      String
+  date        DateTime
+  fromWarehouseId String  // Source location (warehouse/zone/rack/shelf/box)
+  toWarehouseId   String  // Destination location
+  status      String   @default("DRAFT") // DRAFT, CONFIRMED, CANCELLED
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  fromWarehouse Warehouse            @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse   Warehouse            @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  lines         StockTransferLine[]
+
+  @@unique([companyId, number])
+}
+
+model StockTransferLine {
+  id             String   @id @default(cuid())
+  stockTransferId String
+  itemId         String
+  quantity       Float
+  notes          String?
+
+  stockTransfer StockTransfer @relation(fields: [stockTransferId], references: [id], onDelete: Cascade)
+  item          Item          @relation(fields: [itemId], references: [id])
 }
 
 // ============================================

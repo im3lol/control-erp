@@ -43,13 +43,37 @@ export async function GET(request: NextRequest) {
         _count: {
           select: {
             balances: true,
+            salesLines: true,
+            purchaseLines: true,
+            stockMovements: true,
           },
         },
       },
       orderBy: { code: 'asc' },
     })
 
-    return NextResponse.json(items)
+    // Add adjustment count for each item (stockMovements where type starts with 'ADJ')
+    const itemsWithStats = await Promise.all(
+      items.map(async (item) => {
+        const adjustmentCount = await db.stockMovement.count({
+          where: {
+            itemId: item.id,
+            type: { in: ['ADJ', 'ADJ+', 'ADJ-'] },
+          },
+        })
+        return {
+          ...item,
+          _stats: {
+            salesCount: item._count.salesLines,
+            purchaseCount: item._count.purchaseLines,
+            movementCount: item._count.stockMovements,
+            adjustmentCount,
+          },
+        }
+      })
+    )
+
+    return NextResponse.json(itemsWithStats)
   } catch (error) {
     if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
       return NextResponse.json({ error: error.message }, { status: 403 })
@@ -88,9 +112,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
     }
 
-    if (!code || !nameAr) {
+    if (!code) {
       return NextResponse.json(
-        { error: 'code and nameAr are required' },
+        { error: 'code is required' },
         { status: 400 }
       )
     }
@@ -124,7 +148,7 @@ export async function POST(request: NextRequest) {
       data: {
         companyId,
         code,
-        nameAr,
+        nameAr: nameAr || null,
         nameEn,
         categoryId,
         uomId,
@@ -253,7 +277,7 @@ export async function PUT(request: NextRequest) {
       where: { id },
       data: {
         ...(code !== undefined && { code }),
-        ...(nameAr !== undefined && { nameAr }),
+        ...(nameAr !== undefined && { nameAr: nameAr || null }),
         ...(nameEn !== undefined && { nameEn }),
         ...(categoryId !== undefined && { categoryId }),
         ...(uomId !== undefined && { uomId }),

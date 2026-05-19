@@ -184,13 +184,12 @@ export default function CategoriesList() {
 
     setSubmitting(true)
     try {
-      const url = editingId
-        ? `/api/inventory/categories/${editingId}`
-        : '/api/inventory/categories'
+      const url = '/api/inventory/categories'
       const method = editingId ? 'PUT' : 'POST'
 
       const payload = {
         ...formData,
+        ...(editingId ? { id: editingId } : {}),
         parentId: formData.parentId || null,
       }
 
@@ -218,7 +217,11 @@ export default function CategoriesList() {
   const handleDelete = async () => {
     if (!deletingId) return
     try {
-      const res = await fetch(`/api/inventory/categories/${deletingId}?companyId=${companyId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/inventory/categories?companyId=${companyId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deletingId, companyId }),
+      })
       if (res.ok) {
         toast.success('تم حذف الفئة بنجاح')
         fetchCategories()

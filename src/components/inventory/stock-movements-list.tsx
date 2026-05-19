@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { ArrowLeftRight, SlidersHorizontal, Loader2 } from 'lucide-react'
+import { ArrowLeftRight, SlidersHorizontal, Loader2, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -98,6 +98,8 @@ const typeBadgeStyles: Record<string, string> = {
 
 export default function StockMovementsList() {
   const companyId = useAppStore(state => state.currentCompanyId)
+  const itemFilter = useAppStore(state => state.itemFilter)
+  const setItemFilter = useAppStore(state => state.setItemFilter)
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
@@ -118,7 +120,9 @@ export default function StockMovementsList() {
 
   const fetchMovements = async () => {
     try {
-      const res = await fetch(`/api/inventory/stock-movements?companyId=${companyId}`)
+      const params = new URLSearchParams()
+      if (itemFilter) params.set('itemId', itemFilter)
+      const res = await fetch(`/api/inventory/stock-movements?companyId=${companyId}&${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         setMovements(data)
@@ -180,6 +184,11 @@ export default function StockMovementsList() {
 
     return matchesType && matchesWarehouse && matchesDateFrom && matchesDateTo
   })
+
+  // Refetch when itemFilter changes
+  useEffect(() => {
+    fetchMovements()
+  }, [itemFilter])
 
   const handleOpenAdjust = () => {
     setAdjustForm(initialAdjustmentForm)
@@ -274,6 +283,17 @@ export default function StockMovementsList() {
         <CardContent>
           {/* Filters */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
+            {itemFilter && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+                <span>تصفية حسب الصنف</span>
+                <button
+                  onClick={() => setItemFilter(null)}
+                  className="h-5 w-5 rounded-full bg-emerald-200 hover:bg-emerald-300 flex items-center justify-center"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
             <Select value={typeFilter} onValueChange={setTypeFilter}>
               <SelectTrigger className="w-full sm:w-36">
                 <SelectValue placeholder="النوع" />

@@ -79,6 +79,8 @@ interface AppState {
   isAuthenticated: boolean
   accessToken: string | null
   hydrated: boolean
+  // Item filter for navigation from item detail
+  itemFilter: string | null
   // Navigation actions
   setModule: (module: Module) => void
   setView: (view: string) => void
@@ -92,6 +94,7 @@ interface AppState {
   setAccessToken: (token: string | null) => void
   hydrate: () => void
   logout: () => void
+  setItemFilter: (filter: string | null) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -105,11 +108,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   isAuthenticated: false,
   accessToken: null,
   hydrated: false,
+  itemFilter: null,
   // Navigation actions
   setModule: (module) => set({ currentModule: module, currentView: '' }),
   setView: (view) => set({ currentView: view }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  setItemFilter: (filter) => set({ itemFilter: filter }),
   // Auth & company actions
   setUser: (user) => {
     set({ user, isAuthenticated: true })

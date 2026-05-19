@@ -64,6 +64,7 @@ import {
 } from '@/components/ui/sheet'
 import { useAppStore } from '@/lib/store'
 import { formatCurrency, formatDate, getStatusColor, getStatusLabel } from '@/lib/erp-utils'
+import { X } from 'lucide-react'
 
 interface Customer {
   id: string
@@ -140,6 +141,8 @@ const emptyLine: InvoiceLineInput = {
 
 export default function SalesInvoicesList() {
   const companyId = useAppStore(state => state.currentCompanyId)
+  const itemFilter = useAppStore(state => state.itemFilter)
+  const setItemFilter = useAppStore(state => state.setItemFilter)
   const [invoices, setInvoices] = useState<SalesInvoice[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [items, setItems] = useState<Item[]>([])
@@ -189,6 +192,7 @@ export default function SalesInvoicesList() {
       if (customerFilter && customerFilter !== 'all') params.set('customerId', customerFilter)
       if (fromDate) params.set('fromDate', fromDate)
       if (toDate) params.set('toDate', toDate)
+      if (itemFilter) params.set('itemId', itemFilter)
 
       const res = await fetch(`/api/sales/invoices?companyId=${companyId}&${params.toString()}`)
       if (res.ok) {
@@ -200,7 +204,7 @@ export default function SalesInvoicesList() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter, customerFilter, fromDate, toDate])
+  }, [statusFilter, customerFilter, fromDate, toDate, itemFilter])
 
   useEffect(() => {
     fetchInvoices()
@@ -512,6 +516,17 @@ export default function SalesInvoicesList() {
         <CardContent>
           {/* Filters */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
+            {itemFilter && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+                <span>تصفية حسب الصنف</span>
+                <button
+                  onClick={() => setItemFilter(null)}
+                  className="h-5 w-5 rounded-full bg-emerald-200 hover:bg-emerald-300 flex items-center justify-center"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
             <div className="relative flex-1">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-40">

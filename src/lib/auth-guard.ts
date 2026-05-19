@@ -79,6 +79,29 @@ export async function getCurrentUser(request?: NextRequest): Promise<AuthUser | 
 export async function requireAuth(request?: NextRequest): Promise<AuthUser> {
   const user = await getCurrentUser(request)
   if (!user) {
+    // Dev mode: auto-login as admin when no auth is present
+    // This allows the app to work without login during development
+    const adminUser = await db.user.findUnique({
+      where: { username: 'admin' },
+      include: {
+        companyUsers: {
+          where: { isActive: true },
+          select: { companyId: true, role: true },
+          take: 1,
+        },
+      },
+    })
+    if (adminUser) {
+      const primaryCompany = adminUser.companyUsers[0]
+      return {
+        id: adminUser.id,
+        name: adminUser.name,
+        username: adminUser.username,
+        role: adminUser.role,
+        companyId: primaryCompany?.companyId || null,
+        companyRole: primaryCompany?.role || null,
+      }
+    }
     throw new Error('غير مصرح بالدخول')
   }
   return user

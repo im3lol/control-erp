@@ -40,6 +40,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { useAppStore } from '@/lib/store'
 import { formatCurrency, formatDate, getStatusColor, getStatusLabel } from '@/lib/erp-utils'
+import { X } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -117,6 +118,8 @@ const emptyLine: InvoiceLine = {
 
 export default function PurchaseInvoicesList() {
   const companyId = useAppStore(state => state.currentCompanyId)
+  const itemFilter = useAppStore(state => state.itemFilter)
+  const setItemFilter = useAppStore(state => state.setItemFilter)
   const [invoices, setInvoices] = useState<PurchaseInvoice[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
@@ -164,6 +167,7 @@ export default function PurchaseInvoicesList() {
       if (supplierFilter !== 'all') params.set('supplierId', supplierFilter)
       if (fromDate) params.set('fromDate', fromDate)
       if (toDate) params.set('toDate', toDate)
+      if (itemFilter) params.set('itemId', itemFilter)
 
       const res = await fetch(`/api/purchases/invoices?companyId=${companyId}&${params.toString()}`)
       if (res.ok) {
@@ -200,7 +204,7 @@ export default function PurchaseInvoicesList() {
 
   useEffect(() => {
     if (!loading) fetchInvoices()
-  }, [statusFilter, supplierFilter, fromDate, toDate])
+  }, [statusFilter, supplierFilter, fromDate, toDate, itemFilter])
 
   // ── Line calculations ──
 
@@ -433,6 +437,17 @@ export default function PurchaseInvoicesList() {
         <CardContent>
           {/* Filters */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
+            {itemFilter && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+                <span>تصفية حسب الصنف</span>
+                <button
+                  onClick={() => setItemFilter(null)}
+                  className="h-5 w-5 rounded-full bg-emerald-200 hover:bg-emerald-300 flex items-center justify-center"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
             <div className="relative flex-1">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-40">
