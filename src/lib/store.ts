@@ -26,6 +26,48 @@ export interface CompanyInfo {
   role?: string
 }
 
+// ── localStorage helpers ──────────────────────────────────────────────────────
+const STORAGE_KEY = 'ctrl_erp_auth'
+
+function loadFromStorage(): { user: UserInfo | null; accessToken: string | null; companies: CompanyInfo[]; currentCompanyId: string | null } {
+  if (typeof window === 'undefined') {
+    return { user: null, accessToken: null, companies: [], currentCompanyId: null }
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const data = JSON.parse(raw)
+      return {
+        user: data.user || null,
+        accessToken: data.accessToken || null,
+        companies: data.companies || [],
+        currentCompanyId: data.currentCompanyId || null,
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return { user: null, accessToken: null, companies: [], currentCompanyId: null }
+}
+
+function saveToStorage(data: { user: UserInfo | null; accessToken: string | null; companies: CompanyInfo[]; currentCompanyId: string | null }) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  } catch {
+    // ignore write errors
+  }
+}
+
+function clearStorage() {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
 interface AppState {
   currentModule: Module
   currentView: string
@@ -36,6 +78,7 @@ interface AppState {
   companies: CompanyInfo[]
   isAuthenticated: boolean
   accessToken: string | null
+  hydrated: boolean
   // Navigation actions
   setModule: (module: Module) => void
   setView: (view: string) => void
@@ -47,10 +90,11 @@ interface AppState {
   setCompanies: (companies: CompanyInfo[]) => void
   addCompany: (company: CompanyInfo) => void
   setAccessToken: (token: string | null) => void
+  hydrate: () => void
   logout: () => void
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   currentModule: 'dashboard',
   currentView: '',
   sidebarOpen: true,
@@ -60,16 +104,76 @@ export const useAppStore = create<AppState>((set) => ({
   companies: [],
   isAuthenticated: false,
   accessToken: null,
+  hydrated: false,
   // Navigation actions
   setModule: (module) => set({ currentModule: module, currentView: '' }),
   setView: (view) => set({ currentView: view }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   // Auth & company actions
-  setUser: (user) => set({ user, isAuthenticated: true }),
-  setCurrentCompany: (id) => set({ currentCompanyId: id }),
-  setCompanies: (companies) => set({ companies }),
-  addCompany: (company) => set((state) => ({ companies: [...state.companies, company] })),
-  setAccessToken: (token) => set({ accessToken: token }),
-  logout: () => set({ user: null, currentCompanyId: null, companies: [], isAuthenticated: false, accessToken: null }),
+  setUser: (user) => {
+    set({ user, isAuthenticated: true })
+    saveToStorage({
+      user,
+      accessToken: get().accessToken,
+      companies: get().companies,
+      currentCompanyId: get().currentCompanyId,
+    })
+  },
+  setCurrentCompany: (id) => {
+    set({ currentCompanyId: id })
+    saveToStorage({
+      user: get().user,
+      accessToken: get().accessToken,
+      companies: get().companies,
+      currentCompanyId: id,
+    })
+  },
+  setCompanies: (companies) => {
+    set({ companies })
+    saveToStorage({
+      user: get().user,
+      accessToken: get().accessToken,
+      companies,
+      currentCompanyId: get().currentCompanyId,
+    })
+  },
+  addCompany: (company) => {
+    const newCompanies = [...get().companies, company]
+    set({ companies: newCompanies })
+    saveToStorage({
+      user: get().user,
+      accessToken: get().accessToken,
+      companies: newCompanies,
+      currentCompanyId: get().currentCompanyId,
+    })
+  },
+  setAccessToken: (token) => {
+    set({ accessToken: token })
+    saveToStorage({
+      user: get().user,
+      accessToken: token,
+      companies: get().companies,
+      currentCompanyId: get().currentCompanyId,
+    })
+  },
+  hydrate: () => {
+    const stored = loadFromStorage()
+    if (stored.user && stored.accessToken) {
+      set({
+        user: stored.user,
+        accessToken: stored.accessToken,
+        companies: stored.companies,
+        currentCompanyId: stored.currentCompanyId,
+        isAuthenticated: true,
+        hydrated: true,
+      })
+    } else {
+      set({ hydrated: true })
+    }
+  },
+  logout: () => {
+    clearStorage()
+    set({ user: null, currentCompanyId: null, companies: [], isAuthenticated: false, accessToken: null })
+  },
 }))

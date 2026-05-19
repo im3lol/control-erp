@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
 import { useAppStore } from '@/lib/store'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,7 +22,7 @@ export default function LoginForm() {
     setLoading(true)
 
     try {
-      // Step 1: Verify credentials and get user data + token via our custom login API
+      // Use our custom token-based login API
       const loginRes = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -38,24 +37,12 @@ export default function LoginForm() {
         return
       }
 
-      // Step 2: Store the access token (used as fallback when cookies don't work)
+      // Store the access token
       if (loginData.token) {
         setAccessToken(loginData.token)
       }
 
-      // Step 3: Try to establish NextAuth session cookie (best effort)
-      try {
-        await signIn('credentials', {
-          username,
-          password,
-          redirect: false,
-        })
-      } catch (e) {
-        // NextAuth signIn may fail in proxy environments, but we have the token
-        console.warn('NextAuth signIn failed (non-critical):', e)
-      }
-
-      // Step 4: Set user data from our verified login response
+      // Set user data from the verified login response
       if (loginData.user) {
         const userData = {
           id: loginData.user.id || '',

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, type ElementType } from 'react'
-import { SessionProvider, useSession, signOut } from 'next-auth/react'
+// Auth handled via token-based system (no SessionProvider needed)
 import { useAppStore } from '@/lib/store'
 import type { Module } from '@/lib/store'
 import { formatCurrency, formatDate } from '@/lib/erp-utils'
@@ -644,9 +644,9 @@ function AppContent() {
     logout,
   } = useAppStore()
 
-  const { data: session, status } = useSession()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
   const [mobileOpen, setMobileOpen] = useState(false)
+  const hydrated = useAppStore(state => state.hydrated)
 
   // ── Global fetch interceptor: attach auth token to all /api/ requests ──
   useEffect(() => {
@@ -671,45 +671,13 @@ function AppContent() {
 
   const [setupWizardOpen, setSetupWizardOpen] = useState(false)
 
-  // ── Sync session with store ──
+  // ── Hydrate auth state from localStorage on mount ──
   useEffect(() => {
-    if (status === 'loading') return
+    useAppStore.getState().hydrate()
+  }, [])
 
-    if (session?.user && !isAuthenticated) {
-      // Session exists but store doesn't know about it yet (e.g. page refresh)
-      const userData = {
-        id: (session.user as any).id,
-        name: session.user.name || '',
-        username: (session.user as any).username || '',
-        role: (session.user as any).role || 'viewer',
-        email: session.user.email || undefined,
-      }
-      useAppStore.getState().setUser(userData)
-
-      // Fetch companies
-      fetch('/api/auth/companies')
-        .then(res => res.ok ? res.json() : [])
-        .then((companiesData) => {
-          useAppStore.getState().setCompanies(companiesData)
-
-          // Auto-select if only one company
-          if (companiesData.length === 1) {
-            useAppStore.getState().setCurrentCompany(companiesData[0].id)
-          }
-        })
-        .catch(console.error)
-    }
-    // Note: We do NOT auto-logout when session is null but store is authenticated.
-    // The login form sets user data directly via our custom /api/auth/login endpoint,
-    // and NextAuth session cookies may not propagate properly through the Caddy proxy.
-    // Session validation happens server-side on each API call via auth-guard.ts.
-  }, [session, status, isAuthenticated, logout])
-
-  // ── Loading state ──
-  // Show spinner only when session is loading AND store doesn't have user data yet
-  const isLoading = status === 'loading' && !isAuthenticated
-
-  if (isLoading) {
+  // ── Loading state while hydrating ──
+  if (!hydrated) {
     return (
       <div dir="rtl" className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-3">
@@ -773,9 +741,8 @@ function AppContent() {
   }
 
   // ── Logout Handler ──
-  const handleLogout = async () => {
+  const handleLogout = () => {
     logout()
-    await signOut({ redirect: false })
   }
 
   // ── Current Title ──
@@ -1077,12 +1044,8 @@ function AppContent() {
   )
 }
 
-// ─── Main Page Component with SessionProvider ────────────────────────────────
+// ─── Main Page Component ──────────────────────────────────────────────────────
 
 export default function Home() {
-  return (
-    <SessionProvider>
-      <AppContent />
-    </SessionProvider>
-  )
+  return <AppContent />
 }

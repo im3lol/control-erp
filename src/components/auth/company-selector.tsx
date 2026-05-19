@@ -5,16 +5,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Building2, Plus, ArrowLeft } from 'lucide-react'
-import { canManageCompany } from '@/lib/permissions'
-import { roleLabels } from '@/lib/permissions'
-import { signOut } from 'next-auth/react'
+import { canManageCompany, roleLabels } from '@/lib/permissions'
 
 interface CompanySelectorProps {
   onSelect: (companyId: string) => void
 }
 
 export default function CompanySelector({ onSelect }: CompanySelectorProps) {
-  const { user, companies } = useAppStore()
+  const { user, companies, logout } = useAppStore()
 
   const handleSelect = (companyId: string) => {
     onSelect(companyId)
@@ -71,10 +69,7 @@ export default function CompanySelector({ onSelect }: CompanySelectorProps) {
           <Button
             variant="ghost"
             className="text-emerald-200 hover:text-white hover:bg-white/10 gap-2"
-            onClick={async () => {
-              useAppStore.getState().logout()
-              await signOut({ redirect: false })
-            }}
+            onClick={() => logout()}
           >
             <ArrowLeft className="h-4 w-4" />
             تسجيل خروج
