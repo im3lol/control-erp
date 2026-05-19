@@ -92,6 +92,7 @@ import ItemBalancesList from '@/components/inventory/item-balances-list'
 import MaterialRequestsList from '@/components/inventory/material-requests-list'
 import DeliveryNotesList from '@/components/inventory/delivery-notes-list'
 import PurchaseReceiptsList from '@/components/inventory/purchase-receipts-list'
+import InventoryDashboard from '@/components/inventory/inventory-dashboard'
 import PickListsList from '@/components/inventory/pick-lists-list'
 import SuppliersList from '@/components/purchases/suppliers-list'
 import PurchaseInvoicesList from '@/components/purchases/purchase-invoices-list'
@@ -881,6 +882,7 @@ function AppContent() {
       }
     }
     if (currentModule === 'inventory') {
+      if (!currentView) return <InventoryDashboard />
       switch (currentView) {
         case 'warehouses':
           return <WarehousesList />
