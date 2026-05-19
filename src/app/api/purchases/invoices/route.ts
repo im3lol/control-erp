@@ -1,10 +1,12 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { generateDocNumber } from '@/lib/erp-utils'
+import { requirePermission } from '@/lib/auth-guard'
 
 // GET /api/purchases/invoices - List purchase invoices with filters
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('purchases.view')
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     if (!companyId) {
@@ -49,6 +51,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(invoices)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Get purchase invoices error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch purchase invoices' },
@@ -60,6 +65,7 @@ export async function GET(request: NextRequest) {
 // POST /api/purchases/invoices - Create purchase invoice
 export async function POST(request: NextRequest) {
   try {
+    const user = await requirePermission('purchases.create')
     const body = await request.json()
     const {
       companyId,
@@ -222,6 +228,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(invoice, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Create purchase invoice error:', error)
     return NextResponse.json(
       { error: 'Failed to create purchase invoice' },

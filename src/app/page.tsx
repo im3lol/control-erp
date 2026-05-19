@@ -5,7 +5,8 @@ import { SessionProvider, useSession, signOut } from 'next-auth/react'
 import { useAppStore } from '@/lib/store'
 import type { Module } from '@/lib/store'
 import { formatCurrency, formatDate } from '@/lib/erp-utils'
-import { roleLabels, canManageCompany } from '@/lib/permissions'
+import { roleLabels, canManageCompany, hasPermission } from '@/lib/permissions'
+import type { Permission } from '@/lib/permissions'
 import LoginForm from '@/components/auth/login-form'
 import CompanySelector from '@/components/auth/company-selector'
 import {
@@ -97,6 +98,43 @@ import PurchaseReport from '@/components/reports/purchase-report'
 import CustomerAgingReport from '@/components/reports/customer-aging'
 import SupplierAgingReport from '@/components/reports/supplier-aging'
 import InvestorsList from '@/components/investors/investors-list'
+
+// ─── Navigation Permission Checks ──────────────────────────────────────────
+
+// Map each nav module to the permission required to view it
+const moduleViewPermissions: Record<string, Permission> = {
+  dashboard: 'settings.view', // Everyone has settings.view, so dashboard is always visible
+  settings: 'settings.edit',   // Only admin/super_admin can see settings (they have settings.edit)
+  inventory: 'inventory.view',
+  accounting: 'accounting.view',
+  sales: 'sales.view',
+  purchases: 'purchases.view',
+  investors: 'investors.view',
+  reports: 'reports.view',
+}
+
+// Filter navigation based on user role
+function filterNavigationByRole(nav: NavItem[], role: string): NavItem[] {
+  return nav
+    .filter((item) => {
+      // Dashboard is always visible
+      if (item.id === 'dashboard') return true
+      const requiredPerm = moduleViewPermissions[item.id]
+      if (!requiredPerm) return true
+      return hasPermission(role, requiredPerm)
+    })
+    .map((item) => {
+      if (!item.children) return item
+      // Filter children based on permissions too
+      const filteredChildren = item.children.filter((child) => {
+        // Special case: 'users' child under settings requires users.view
+        if (child.id === 'users') return hasPermission(role, 'users.view')
+        // chart-of-accounts under settings or accounting - always visible if parent is visible
+        return true
+      })
+      return { ...item, children: filteredChildren.length > 0 ? filteredChildren : undefined }
+    })
+}
 
 // ─── Navigation Configuration ────────────────────────────────────────────────
 
@@ -248,6 +286,7 @@ interface SidebarNavProps {
   onNavClick: (id: string, hasChildren: boolean) => void
   onSubClick: (moduleId: string, viewId: string) => void
   isCollapsed: boolean
+  userRole: string
 }
 
 function SidebarNav({
@@ -257,11 +296,14 @@ function SidebarNav({
   onNavClick,
   onSubClick,
   isCollapsed,
+  userRole,
 }: SidebarNavProps) {
+  const visibleNav = filterNavigationByRole(navigation, userRole)
+
   if (isCollapsed) {
     return (
       <nav className="space-y-1 p-2">
-        {navigation.map((item) => {
+        {visibleNav.map((item) => {
           const isActive = currentModule === item.id
           return (
             <button
@@ -285,7 +327,7 @@ function SidebarNav({
 
   return (
     <nav className="space-y-1 p-3">
-      {navigation.map((item) => {
+      {visibleNav.map((item) => {
         const isActive = currentModule === item.id && !currentView
         const isExpanded = expandedItems.includes(item.id)
         const isParentActive = currentModule === item.id
@@ -840,7 +882,7 @@ function AppContent() {
                 <LayoutDashboard className="h-4 w-4 text-white" />
               </div>
               <span className="font-bold text-emerald-700 text-lg">
-                Control
+                Ctrl
               </span>
             </div>
             <ScrollArea className="h-[calc(100dvh-3.5rem)]">
@@ -851,6 +893,7 @@ function AppContent() {
                 onNavClick={handleNavClick}
                 onSubClick={handleSubClick}
                 isCollapsed={false}
+                userRole={user?.role || 'viewer'}
               />
               {/* Mobile user section */}
               <div className="border-t p-3 mt-2">
@@ -948,7 +991,7 @@ function AppContent() {
                   <LayoutDashboard className="h-4 w-4 text-white" />
                 </div>
                 <span className="font-bold text-emerald-700 text-lg">
-                  Control
+                  Ctrl
                 </span>
               </div>
             ) : (
@@ -967,6 +1010,7 @@ function AppContent() {
               onNavClick={sidebarOpen ? handleNavClick : handleCollapsedNavClick}
               onSubClick={handleSubClick}
               isCollapsed={!sidebarOpen}
+              userRole={user?.role || 'viewer'}
             />
           </ScrollArea>
 

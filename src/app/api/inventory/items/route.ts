@@ -1,11 +1,13 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission, requireAuth } from '@/lib/auth-guard'
 
 // GET /api/inventory/items - List all items with filters, include codes and image
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.view')
     const { searchParams } = new URL(request.url)
-    const companyId = searchParams.get('companyId')
+    const companyId = searchParams.get('companyId') || user.companyId
     if (!companyId) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
     }
@@ -49,6 +51,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(items)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Get items error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch items' },
@@ -60,6 +65,7 @@ export async function GET(request: NextRequest) {
 // POST /api/inventory/items - Create item
 export async function POST(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.create')
     const body = await request.json()
     const {
       companyId,
@@ -131,9 +137,9 @@ export async function POST(request: NextRequest) {
         isActive: isActive ?? true,
         codes: codes && codes.length > 0
           ? {
-              create: codes.map((c: { codeType: string; value: string; isPrimary?: boolean }) => ({
+              create: codes.map((c: { codeType: string; code: string; isPrimary?: boolean }) => ({
                 codeType: c.codeType,
-                value: c.value,
+                code: c.code,
                 isPrimary: c.isPrimary ?? false,
               })),
             }
@@ -148,6 +154,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(item, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Create item error:', error)
     return NextResponse.json(
       { error: 'Failed to create item' },
@@ -159,6 +168,7 @@ export async function POST(request: NextRequest) {
 // PUT /api/inventory/items - Update item
 export async function PUT(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.edit')
     const body = await request.json()
     const {
       companyId,
@@ -257,9 +267,9 @@ export async function PUT(request: NextRequest) {
         ...(codes !== undefined && codes.length > 0
           ? {
               codes: {
-                create: codes.map((c: { codeType: string; value: string; isPrimary?: boolean }) => ({
+                create: codes.map((c: { codeType: string; code: string; isPrimary?: boolean }) => ({
                   codeType: c.codeType,
-                  value: c.value,
+                  code: c.code,
                   isPrimary: c.isPrimary ?? false,
                 })),
               },
@@ -275,6 +285,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(item)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Update item error:', error)
     return NextResponse.json(
       { error: 'Failed to update item' },
@@ -286,6 +299,7 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/inventory/items - Delete item
 export async function DELETE(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.delete')
     const body = await request.json()
     const { companyId, id } = body
 
@@ -353,6 +367,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ message: 'Item deleted successfully' })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Delete item error:', error)
     return NextResponse.json(
       { error: 'Failed to delete item' },

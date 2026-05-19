@@ -3,15 +3,17 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const VALID_CODE_TYPES = ['UPC', 'EAN', 'SKU', 'ASIN', 'FNSKU', 'OTHER']
 
-// GET /api/inventory/item-codes - List codes for an item
-export async function GET(request: NextRequest) {
+// GET /api/items/[id]/codes - Get all codes for an item
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const { searchParams } = new URL(request.url)
-    const itemId = searchParams.get('itemId')
+    const { id: itemId } = await params
 
     if (!itemId) {
       return NextResponse.json(
-        { error: 'itemId مطلوب' },
+        { error: 'معرف الصنف مطلوب' },
         { status: 400 }
       )
     }
@@ -31,11 +33,15 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/inventory/item-codes - Add code to item
-export async function POST(request: NextRequest) {
+// POST /api/items/[id]/codes - Add a new code to an item
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
+    const { id: itemId } = await params
     const body = await request.json()
-    const { itemId, codeType, code, isPrimary } = body
+    const { codeType, code, isPrimary } = body
 
     if (!itemId || !codeType || !code) {
       return NextResponse.json(
@@ -98,20 +104,24 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/inventory/item-codes - Update code
-export async function PUT(request: NextRequest) {
+// DELETE /api/items/[id]/codes - Remove a code from an item (by code ID in query param)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const body = await request.json()
-    const { id, codeType, code, isPrimary } = body
+    const { id: itemId } = await params
+    const { searchParams } = new URL(request.url)
+    const codeId = searchParams.get('codeId')
 
-    if (!id) {
+    if (!itemId || !codeId) {
       return NextResponse.json(
-        { error: 'id مطلوب' },
+        { error: 'itemId و codeId مطلوبان' },
         { status: 400 }
       )
     }
 
-    const existing = await db.itemCode.findUnique({ where: { id } })
+    const existing = await db.itemCode.findUnique({ where: { id: codeId } })
     if (!existing) {
       return NextResponse.json(
         { error: 'الكود غير موجود' },
@@ -119,79 +129,15 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    if (codeType && !VALID_CODE_TYPES.includes(codeType)) {
+    // Verify the code belongs to the item
+    if (existing.itemId !== itemId) {
       return NextResponse.json(
-        { error: `codeType يجب أن يكون أحد: ${VALID_CODE_TYPES.join(', ')}` },
-        { status: 400 }
+        { error: 'الكود لا ينتمي لهذا الصنف' },
+        { status: 403 }
       )
     }
 
-    // If changing codeType or code, check uniqueness
-    if ((codeType && codeType !== existing.codeType) || (code && code !== existing.code)) {
-      const duplicate = await db.itemCode.findFirst({
-        where: {
-          itemId: existing.itemId,
-          codeType: codeType || existing.codeType,
-          code: code || existing.code,
-        },
-      })
-      if (duplicate) {
-        return NextResponse.json(
-          { error: `يوجد كود من نوع ${codeType || existing.codeType} بنفس القيمة لهذا الصنف بالفعل` },
-          { status: 409 }
-        )
-      }
-    }
-
-    // If setting as primary, unset any existing primary
-    if (isPrimary) {
-      await db.itemCode.updateMany({
-        where: { itemId: existing.itemId, isPrimary: true },
-        data: { isPrimary: false },
-      })
-    }
-
-    const updated = await db.itemCode.update({
-      where: { id },
-      data: {
-        ...(codeType !== undefined && { codeType }),
-        ...(code !== undefined && { code: code.trim() }),
-        ...(isPrimary !== undefined && { isPrimary }),
-      },
-    })
-
-    return NextResponse.json(updated)
-  } catch (error) {
-    console.error('Update item code error:', error)
-    return NextResponse.json(
-      { error: 'فشل في تحديث الكود' },
-      { status: 500 }
-    )
-  }
-}
-
-// DELETE /api/inventory/item-codes - Delete code
-export async function DELETE(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { id } = body
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id مطلوب' },
-        { status: 400 }
-      )
-    }
-
-    const existing = await db.itemCode.findUnique({ where: { id } })
-    if (!existing) {
-      return NextResponse.json(
-        { error: 'الكود غير موجود' },
-        { status: 404 }
-      )
-    }
-
-    await db.itemCode.delete({ where: { id } })
+    await db.itemCode.delete({ where: { id: codeId } })
 
     return NextResponse.json({ message: 'تم حذف الكود بنجاح' })
   } catch (error) {

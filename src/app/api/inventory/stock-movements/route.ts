@@ -1,9 +1,11 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/auth-guard'
 
 // GET /api/inventory/stock-movements - List stock movements with filters
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.view')
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     if (!companyId) {
@@ -55,6 +57,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(movements)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Get stock movements error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch stock movements' },
@@ -66,6 +71,7 @@ export async function GET(request: NextRequest) {
 // POST /api/inventory/stock-movements - Create stock movement (manual adjustment)
 export async function POST(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.create')
     const body = await request.json()
     const { companyId, type, itemId, warehouseId, quantity, unitCost, reason, date } = body
 
@@ -285,6 +291,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(movement, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Create stock movement error:', error)
     return NextResponse.json(
       { error: 'Failed to create stock movement' },

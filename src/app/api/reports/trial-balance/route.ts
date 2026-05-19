@@ -1,9 +1,11 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/auth-guard'
 
 // GET /api/reports/trial-balance
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('reports.view')
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     if (!companyId) {
@@ -108,6 +110,9 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Trial balance error:', error)
     return NextResponse.json({ error: 'فشل في تحميل ميزان المراجعة' }, { status: 500 })
   }

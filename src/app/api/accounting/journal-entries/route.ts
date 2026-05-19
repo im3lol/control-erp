@@ -1,10 +1,12 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { generateDocNumber } from '@/lib/erp-utils'
+import { requirePermission } from '@/lib/auth-guard'
 
 // GET /api/accounting/journal-entries - List journal entries with lines
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('accounting.view')
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     if (!companyId) {
@@ -56,6 +58,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(entries)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Get journal entries error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch journal entries' },
@@ -67,6 +72,7 @@ export async function GET(request: NextRequest) {
 // POST /api/accounting/journal-entries - Create journal entry
 export async function POST(request: NextRequest) {
   try {
+    const user = await requirePermission('accounting.create')
     const body = await request.json()
     const { companyId, date, description, sourceType, sourceId, lines } = body
 
@@ -211,6 +217,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(entry, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Create journal entry error:', error)
     return NextResponse.json(
       { error: 'Failed to create journal entry' },

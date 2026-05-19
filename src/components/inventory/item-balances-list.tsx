@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Scale, AlertTriangle } from 'lucide-react'
+import { Scale, AlertTriangle, Package } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -31,6 +31,7 @@ interface Item {
   code: string
   nameAr: string
   minStock: number
+  image: string | null
 }
 
 interface Warehouse {
@@ -210,6 +211,7 @@ export default function ItemBalancesList() {
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                <TableHead className="text-right font-semibold w-12"></TableHead>
                 <TableHead className="text-right font-semibold">كود الصنف</TableHead>
                 <TableHead className="text-right font-semibold">اسم الصنف</TableHead>
                 <TableHead className="text-right font-semibold">المخزن</TableHead>
@@ -222,7 +224,7 @@ export default function ItemBalancesList() {
             <TableBody>
               {filteredBalances.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12">
+                  <TableCell colSpan={8} className="text-center py-12">
                     <div className="flex flex-col items-center text-slate-400">
                       <Scale className="h-12 w-12 mb-3 text-slate-200" />
                       <p className="text-sm">لا توجد أرصدة</p>
@@ -244,6 +246,19 @@ export default function ItemBalancesList() {
                         key={bal.id}
                         className={isLowStock ? 'bg-red-50/50' : ''}
                       >
+                        <TableCell>
+                          {itemInfo?.image ? (
+                            <img
+                              src={itemInfo.image}
+                              alt={itemInfo.nameAr}
+                              className="h-8 w-8 rounded-md object-cover border border-slate-100"
+                            />
+                          ) : (
+                            <div className="h-8 w-8 rounded-md bg-slate-50 flex items-center justify-center border border-slate-100">
+                              <Package className="h-4 w-4 text-slate-300" />
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-sm">
                           {itemInfo?.code || '—'}
                         </TableCell>
@@ -283,7 +298,7 @@ export default function ItemBalancesList() {
                   })}
                   {/* Summary Row */}
                   <TableRow className="bg-slate-50/80 hover:bg-slate-50/80 border-t-2 border-slate-200">
-                    <TableCell colSpan={3} className="font-bold text-slate-700">
+                    <TableCell colSpan={4} className="font-bold text-slate-700">
                       الإجمالي
                     </TableCell>
                     <TableCell className="font-mono font-bold text-slate-700" dir="ltr">

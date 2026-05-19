@@ -195,15 +195,18 @@ model Item {
 }
 
 model ItemCode {
-  id       String  @id @default(cuid())
-  itemId   String
-  codeType String  // UPC, EAN, SKU, ASIN, FNSKU
-  value    String  // The actual code value
-  isPrimary Boolean @default(false)
+  id        String   @id @default(cuid())
+  itemId    String
+  codeType  String   // UPC, EAN, SKU, ASIN, FNSKU, OTHER
+  code      String   // The actual code value
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
-  @@unique([itemId, codeType])
+  @@unique([itemId, codeType, code])
+  @@map("item_codes")
 }
 
 model ItemBalance {

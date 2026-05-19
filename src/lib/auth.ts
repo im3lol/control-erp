@@ -3,6 +3,8 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { db } from '@/lib/db'
 
 export const authOptions: NextAuthOptions = {
+  // Required for proxy environments (Caddy reverse proxy)
+  trustHost: true,
   providers: [
     CredentialsProvider({
       name: 'credentials',

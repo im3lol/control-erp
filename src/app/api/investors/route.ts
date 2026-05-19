@@ -1,11 +1,13 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/auth-guard'
 
 const DEFAULT_COMPANY_ID = 'company-default'
 
 // GET /api/investors - List investors with total investments
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('investors.view')
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search')
     const activeOnly = searchParams.get('activeOnly')
@@ -74,6 +76,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(investorsWithTotals)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Get investors error:', error)
     return NextResponse.json(
       { error: 'فشل في تحميل بيانات المستثمرين' },
@@ -85,6 +90,7 @@ export async function GET(request: NextRequest) {
 // POST /api/investors - Create investor with auto accounts
 export async function POST(request: NextRequest) {
   try {
+    const user = await requirePermission('investors.create')
     const body = await request.json()
     const { fullName, phone, email, nationalId, status } = body
 
@@ -193,6 +199,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(investor, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Create investor error:', error)
     return NextResponse.json(
       { error: 'فشل في إنشاء المستثمر' },

@@ -1,41 +1,17 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { requirePermission, requireAdmin, canAssignRole, getAssignableRoles } from '@/lib/auth-guard'
+import type { Permission } from '@/lib/permissions'
+import { roleLabels } from '@/lib/permissions'
 
-// Simple base64 hash for password (placeholder for real hashing)
 function hashPassword(password: string): string {
   return Buffer.from(password).toString('base64')
-}
-
-// Helper: Check if user has admin access to the company
-async function checkAdminAccess(companyId: string): Promise<{ authorized: boolean; userId?: string; role?: string }> {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) return { authorized: false }
-
-  const userId = (session.user as any).id
-  const userRole = (session.user as any).role
-
-  // super_admin can do anything
-  if (userRole === 'super_admin') {
-    return { authorized: true, userId, role: userRole }
-  }
-
-  // Check if user is admin in this company
-  const companyUser = await db.companyUser.findUnique({
-    where: { companyId_userId: { companyId, userId } },
-  })
-
-  if (companyUser && (companyUser.role === 'admin' || userRole === 'admin')) {
-    return { authorized: true, userId, role: companyUser.role }
-  }
-
-  return { authorized: false, userId, role: userRole }
 }
 
 // GET /api/settings/users - List users in a company via CompanyUser
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('users.view' as Permission)
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     if (!companyId) {
@@ -73,6 +49,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Get users error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch users' },
@@ -85,20 +64,12 @@ export async function GET(request: NextRequest) {
 // Only admin/super_admin can create users
 export async function POST(request: NextRequest) {
   try {
+    const authUser = await requireAdmin()
     const body = await request.json()
     const { companyId, username, name, email, password, role, companyRole, isActive } = body
 
     if (!companyId) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
-    }
-
-    // Check admin access
-    const access = await checkAdminAccess(companyId)
-    if (!access.authorized) {
-      return NextResponse.json(
-        { error: 'غير مصرح. فقط المديرين يمكنهم إضافة مستخدمين' },
-        { status: 403 }
-      )
     }
 
     if (!username || !name || !password) {
@@ -108,10 +79,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Only super_admin can create super_admin users
-    if (role === 'super_admin' && access.role !== 'super_admin') {
+    // Check if the authenticated user can assign the requested role
+    if (!canAssignRole(authUser.role, role ?? 'viewer')) {
       return NextResponse.json(
-        { error: 'غير مصرح بإنشاء مستخدم بدور مدير أعلى' },
+        { error: 'غير مصرح بتعيين هذا الدور. يمكنك فقط تعيين: ' + getAssignableRoles(authUser.role).map(r => roleLabels[r] || r).join('، ') },
         { status: 403 }
       )
     }
@@ -169,6 +140,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية') || error.message.includes('مسؤول'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Create user error:', error)
     return NextResponse.json(
       { error: 'Failed to create user' },
@@ -180,6 +154,7 @@ export async function POST(request: NextRequest) {
 // PUT /api/settings/users - Update user
 export async function PUT(request: NextRequest) {
   try {
+    const authUser = await requireAdmin()
     const body = await request.json()
     const { companyId, id, username, name, email, password, role, companyRole, isActive } = body
 
@@ -194,15 +169,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Check admin access
-    const access = await checkAdminAccess(companyId)
-    if (!access.authorized) {
-      return NextResponse.json(
-        { error: 'غير مصرح. فقط المديرين يمكنهم تعديل المستخدمين' },
-        { status: 403 }
-      )
-    }
-
     const existing = await db.user.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json(
@@ -212,17 +178,17 @@ export async function PUT(request: NextRequest) {
     }
 
     // Only super_admin can modify super_admin users
-    if (existing.role === 'super_admin' && access.role !== 'super_admin') {
+    if (existing.role === 'super_admin' && authUser.role !== 'super_admin') {
       return NextResponse.json(
         { error: 'غير مصرح بتعديل مستخدم بدور مدير أعلى' },
         { status: 403 }
       )
     }
 
-    // Only super_admin can assign super_admin role
-    if (role === 'super_admin' && access.role !== 'super_admin') {
+    // Check if the authenticated user can assign the requested role
+    if (role && !canAssignRole(authUser.role, role)) {
       return NextResponse.json(
-        { error: 'غير مصرح بتعيين دور مدير أعلى' },
+        { error: 'غير مصرح بتعيين هذا الدور' },
         { status: 403 }
       )
     }
@@ -286,6 +252,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(result)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية') || error.message.includes('مسؤول'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Update user error:', error)
     return NextResponse.json(
       { error: 'Failed to update user' },
@@ -297,6 +266,7 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/settings/users - Delete user
 export async function DELETE(request: NextRequest) {
   try {
+    const authUser = await requireAdmin()
     const body = await request.json()
     const { companyId, id } = body
 
@@ -311,15 +281,6 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Check admin access
-    const access = await checkAdminAccess(companyId)
-    if (!access.authorized) {
-      return NextResponse.json(
-        { error: 'غير مصرح. فقط المديرين يمكنهم حذف المستخدمين' },
-        { status: 403 }
-      )
-    }
-
     const existing = await db.user.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json(
@@ -329,7 +290,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Cannot delete super_admin unless you are super_admin
-    if (existing.role === 'super_admin' && access.role !== 'super_admin') {
+    if (existing.role === 'super_admin' && authUser.role !== 'super_admin') {
       return NextResponse.json(
         { error: 'غير مصرح بحذف مستخدم بدور مدير أعلى' },
         { status: 403 }
@@ -337,7 +298,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Cannot delete yourself
-    if (existing.id === access.userId) {
+    if (existing.id === authUser.id) {
       return NextResponse.json(
         { error: 'لا يمكنك حذف حسابك الخاص' },
         { status: 400 }
@@ -375,6 +336,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ message: 'User removed from company successfully' })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية') || error.message.includes('مسؤول'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Delete user error:', error)
     return NextResponse.json(
       { error: 'Failed to delete user' },

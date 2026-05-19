@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Control ERP - نظام كنترول",
-  description: "نظام إدارة الموارد المؤسسية المتكامل - Control ERP",
+  title: "Control ERP - ctrlerp.cloud",
+  description: "نظام إدارة الموارد المؤسسية المتكامل - Control ERP - ctrlerp.cloud",
 };
 
 export default function RootLayout({

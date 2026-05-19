@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label'
 import { LayoutDashboard, Eye, EyeOff, Loader2 } from 'lucide-react'
 
 export default function LoginForm() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
+  const [username, setUsername] = useState('admin')
+  const [password, setPassword] = useState('admin123')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -107,8 +107,8 @@ export default function LoginForm() {
               <LayoutDashboard className="h-8 w-8 text-white" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">تسجيل الدخول</h1>
-          <p className="text-slate-500 mt-1 text-sm">Control ERP - نظام كنترول</p>
+          <h1 className="text-2xl font-bold text-slate-900">Control ERP</h1>
+          <p className="text-slate-500 mt-1 text-sm">نظام كنترول - إدارة موارد مؤسسية متكاملة</p>
         </CardHeader>
 
         <CardContent className="px-8 pb-8 pt-4">
@@ -194,6 +194,7 @@ export default function LoginForm() {
 
             {/* Credentials hint */}
             <div className="mt-6 pt-4 border-t border-slate-100">
+              <p className="text-[11px] text-slate-400 text-center mb-2">بيانات الدخول الافتراضية</p>
               <div className="flex items-center justify-center gap-4 text-xs text-slate-500">
                 <span className="bg-slate-50 px-2.5 py-1 rounded-lg font-mono">admin</span>
                 <span>/</span>

@@ -12,8 +12,6 @@ import {
   Upload,
   X,
   Star,
-  Eye,
-  Image as ImageIcon,
   Barcode,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -78,7 +76,7 @@ interface UOM {
 interface ItemCode {
   id?: string
   codeType: string
-  value: string
+  code: string
   isPrimary: boolean
 }
 
@@ -132,11 +130,12 @@ const initialFormData: ItemFormData = {
 }
 
 const CODE_TYPE_OPTIONS = [
-  { value: 'UPC', label: 'UPC' },
-  { value: 'EAN', label: 'EAN' },
-  { value: 'SKU', label: 'SKU' },
-  { value: 'ASIN', label: 'ASIN' },
-  { value: 'FNSKU', label: 'FNSKU' },
+  { value: 'UPC', label: 'باركود UPC' },
+  { value: 'EAN', label: 'باركود EAN' },
+  { value: 'SKU', label: 'رمز التخزين SKU' },
+  { value: 'ASIN', label: 'أمازون ASIN' },
+  { value: 'FNSKU', label: 'أمازون FNSKU' },
+  { value: 'OTHER', label: 'أخرى' },
 ]
 
 const CODE_TYPE_COLORS: Record<string, string> = {
@@ -145,6 +144,16 @@ const CODE_TYPE_COLORS: Record<string, string> = {
   SKU: 'bg-amber-50 text-amber-700 border-amber-200',
   ASIN: 'bg-purple-50 text-purple-700 border-purple-200',
   FNSKU: 'bg-rose-50 text-rose-700 border-rose-200',
+  OTHER: 'bg-slate-50 text-slate-700 border-slate-200',
+}
+
+const CODE_TYPE_SHORT: Record<string, string> = {
+  UPC: 'UPC',
+  EAN: 'EAN',
+  SKU: 'SKU',
+  ASIN: 'ASIN',
+  FNSKU: 'FNSKU',
+  OTHER: 'أخرى',
 }
 
 export default function ItemsList() {
@@ -259,7 +268,8 @@ export default function ItemsList() {
       !searchTerm ||
       item.nameAr.includes(searchTerm) ||
       item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.nameEn && item.nameEn.toLowerCase().includes(searchTerm.toLowerCase()))
+      (item.nameEn && item.nameEn.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (item.codes && item.codes.some((c) => c.code.toLowerCase().includes(searchTerm.toLowerCase())))
 
     const matchesCategory =
       categoryFilter === 'all' || item.categoryId === categoryFilter
@@ -270,7 +280,7 @@ export default function ItemsList() {
   const handleOpenAdd = () => {
     setEditingId(null)
     setFormData(initialFormData)
-    setItemCodes([{ codeType: 'SKU', value: '', isPrimary: true }])
+    setItemCodes([{ codeType: 'SKU', code: '', isPrimary: true }])
     setImagePreview(null)
     setImageFile(null)
     setDialogOpen(true)
@@ -299,7 +309,7 @@ export default function ItemsList() {
     if (codes.length > 0) {
       setItemCodes(codes)
     } else {
-      setItemCodes([{ codeType: 'SKU', value: '', isPrimary: true }])
+      setItemCodes([{ codeType: 'SKU', code: '', isPrimary: true }])
     }
 
     setDialogOpen(true)
@@ -368,7 +378,7 @@ export default function ItemsList() {
 
   // ── Code handling ──
   const addCodeEntry = () => {
-    setItemCodes((prev) => [...prev, { codeType: 'SKU', value: '', isPrimary: false }])
+    setItemCodes((prev) => [...prev, { codeType: 'SKU', code: '', isPrimary: false }])
   }
 
   const removeCodeEntry = (index: number) => {
@@ -379,7 +389,6 @@ export default function ItemsList() {
     setItemCodes((prev) =>
       prev.map((c, i) => {
         if (i !== index) return c
-        // If setting isPrimary, unset others
         if (field === 'isPrimary' && value === true) {
           return { ...c, isPrimary: true }
         }
@@ -461,7 +470,7 @@ export default function ItemsList() {
       }
 
       // 3. Save codes
-      const validCodes = itemCodes.filter((c) => c.value.trim())
+      const validCodes = itemCodes.filter((c) => c.code.trim())
       if (validCodes.length > 0 && itemId) {
         // If editing, delete existing codes first then recreate
         if (editingId) {
@@ -484,7 +493,7 @@ export default function ItemsList() {
             body: JSON.stringify({
               itemId,
               codeType: code.codeType,
-              value: code.value,
+              code: code.code,
               isPrimary: code.isPrimary,
               companyId,
             }),
@@ -572,7 +581,7 @@ export default function ItemsList() {
             <div className="relative flex-1">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="بحث بالاسم أو الكود..."
+                placeholder="بحث بالاسم أو الكود أو الباركود..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pr-9"
@@ -654,9 +663,17 @@ export default function ItemsList() {
                           <div>
                             <span className="font-mono text-sm">{item.code}</span>
                             {primaryCode && (
-                              <p className="text-xs text-slate-400 font-mono" dir="ltr">
-                                {primaryCode.value}
-                              </p>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-1 py-0 h-4 ${CODE_TYPE_COLORS[primaryCode.codeType] || ''}`}
+                                >
+                                  {CODE_TYPE_SHORT[primaryCode.codeType] || primaryCode.codeType}
+                                </Badge>
+                                <span className="text-xs text-slate-400 font-mono" dir="ltr">
+                                  {primaryCode.code}
+                                </span>
+                              </div>
                             )}
                           </div>
                         </TableCell>
@@ -956,7 +973,7 @@ export default function ItemsList() {
                       value={codeEntry.codeType}
                       onValueChange={(val) => updateCodeEntry(index, 'codeType', val)}
                     >
-                      <SelectTrigger className="w-28 shrink-0">
+                      <SelectTrigger className="w-36 shrink-0">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -968,8 +985,8 @@ export default function ItemsList() {
                       </SelectContent>
                     </Select>
                     <Input
-                      value={codeEntry.value}
-                      onChange={(e) => updateCodeEntry(index, 'value', e.target.value)}
+                      value={codeEntry.code}
+                      onChange={(e) => updateCodeEntry(index, 'code', e.target.value)}
                       placeholder="قيمة الكود"
                       dir="ltr"
                       className="text-left flex-1"
@@ -1099,48 +1116,37 @@ export default function ItemsList() {
                 <div className="border-t pt-4 mt-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Barcode className="h-4 w-4 text-slate-500" />
-                    <p className="text-sm font-semibold">أكواد المنتج</p>
+                    <Label className="text-sm font-semibold">أكواد المنتج</Label>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {detailCodes.map((code) => (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {detailCodes.map((codeEntry) => (
                       <div
-                        key={code.id || code.value}
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
-                          CODE_TYPE_COLORS[code.codeType] || 'bg-slate-50 text-slate-700 border-slate-200'
-                        }`}
+                        key={codeEntry.id || codeEntry.codeType + codeEntry.code}
+                        className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-100"
                       >
-                        <span className="text-xs font-semibold">{code.codeType}</span>
-                        <span className="text-sm font-mono" dir="ltr">{code.value}</span>
-                        {code.isPrimary && (
-                          <Star className="h-3 w-3 text-amber-500 fill-current" />
+                        <Badge
+                          variant="outline"
+                          className={`shrink-0 text-xs ${CODE_TYPE_COLORS[codeEntry.codeType] || ''}`}
+                        >
+                          {CODE_TYPE_SHORT[codeEntry.codeType] || codeEntry.codeType}
+                        </Badge>
+                        <span className="font-mono text-sm" dir="ltr">{codeEntry.code}</span>
+                        {codeEntry.isPrimary && (
+                          <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1 mr-auto">
+                            رئيسي
+                          </Badge>
                         )}
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDetailItem(null)}>
-                  إغلاق
-                </Button>
-                <Button
-                  onClick={() => {
-                    setDetailItem(null)
-                    handleOpenEdit(detailItem)
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-                >
-                  <Pencil className="h-4 w-4" />
-                  تعديل
-                </Button>
-              </DialogFooter>
             </>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
+      {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

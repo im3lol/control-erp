@@ -1,9 +1,11 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/auth-guard'
 
 // GET /api/purchases/suppliers - List suppliers with filters for a company
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('purchases.view')
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     if (!companyId) {
@@ -35,6 +37,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(suppliers)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Get suppliers error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch suppliers' },
@@ -46,6 +51,7 @@ export async function GET(request: NextRequest) {
 // POST /api/purchases/suppliers - Create supplier
 export async function POST(request: NextRequest) {
   try {
+    const user = await requirePermission('purchases.create')
     const body = await request.json()
     const { companyId, code, nameAr, nameEn, phone, email, address, paymentTerms, isActive } = body
 
@@ -104,6 +110,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(supplier, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Create supplier error:', error)
     return NextResponse.json(
       { error: 'Failed to create supplier' },
@@ -115,6 +124,7 @@ export async function POST(request: NextRequest) {
 // PUT /api/purchases/suppliers - Update supplier
 export async function PUT(request: NextRequest) {
   try {
+    const user = await requirePermission('purchases.edit')
     const body = await request.json()
     const { companyId, id, code, nameAr, nameEn, phone, email, address, paymentTerms, isActive } = body
 
@@ -174,6 +184,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(supplier)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Update supplier error:', error)
     return NextResponse.json(
       { error: 'Failed to update supplier' },
@@ -185,6 +198,7 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/purchases/suppliers - Delete supplier
 export async function DELETE(request: NextRequest) {
   try {
+    const user = await requirePermission('purchases.edit')
     const body = await request.json()
     const { companyId, id } = body
 
@@ -230,6 +244,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ message: 'تم حذف المورد بنجاح' })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Delete supplier error:', error)
     return NextResponse.json(
       { error: 'Failed to delete supplier' },

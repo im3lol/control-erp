@@ -1,9 +1,11 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/auth-guard'
 
 // GET /api/sales/customers - List customers with filters for a company
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('sales.view')
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     if (!companyId) {
@@ -35,6 +37,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(customers)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Get customers error:', error)
     return NextResponse.json(
       { error: 'فشل في تحميل العملاء' },
@@ -46,6 +51,7 @@ export async function GET(request: NextRequest) {
 // POST /api/sales/customers - Create customer
 export async function POST(request: NextRequest) {
   try {
+    const user = await requirePermission('sales.create')
     const body = await request.json()
     const {
       companyId,
@@ -115,6 +121,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(customer, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Create customer error:', error)
     return NextResponse.json(
       { error: 'فشل في إنشاء العميل' },
@@ -126,6 +135,7 @@ export async function POST(request: NextRequest) {
 // PUT /api/sales/customers - Update customer
 export async function PUT(request: NextRequest) {
   try {
+    const user = await requirePermission('sales.edit')
     const body = await request.json()
     const {
       companyId,
@@ -198,6 +208,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(customer)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Update customer error:', error)
     return NextResponse.json(
       { error: 'فشل في تحديث العميل' },
@@ -209,6 +222,7 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/sales/customers - Delete customer
 export async function DELETE(request: NextRequest) {
   try {
+    const user = await requirePermission('sales.edit')
     const body = await request.json()
     const { companyId, id } = body
 
@@ -254,6 +268,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ message: 'تم حذف العميل بنجاح' })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Delete customer error:', error)
     return NextResponse.json(
       { error: 'فشل في حذف العميل' },

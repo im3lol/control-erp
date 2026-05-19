@@ -1,9 +1,11 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/auth-guard'
 
 // GET /api/inventory/warehouses - List all warehouses for a company
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.view')
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     if (!companyId) {
@@ -25,6 +27,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(warehouses)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Get warehouses error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch warehouses' },
@@ -36,6 +41,7 @@ export async function GET(request: NextRequest) {
 // POST /api/inventory/warehouses - Create warehouse
 export async function POST(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.create')
     const body = await request.json()
     const { companyId, code, nameAr, nameEn, location, manager, isActive } = body
 
@@ -75,6 +81,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(warehouse, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Create warehouse error:', error)
     return NextResponse.json(
       { error: 'Failed to create warehouse' },
@@ -86,6 +95,7 @@ export async function POST(request: NextRequest) {
 // PUT /api/inventory/warehouses - Update warehouse
 export async function PUT(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.edit')
     const body = await request.json()
     const { companyId, id, code, nameAr, nameEn, location, manager, isActive } = body
 
@@ -143,6 +153,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(warehouse)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Update warehouse error:', error)
     return NextResponse.json(
       { error: 'Failed to update warehouse' },
@@ -154,6 +167,7 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/inventory/warehouses - Delete warehouse
 export async function DELETE(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.delete')
     const body = await request.json()
     const { companyId, id } = body
 
@@ -199,6 +213,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ message: 'Warehouse deleted successfully' })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Delete warehouse error:', error)
     return NextResponse.json(
       { error: 'Failed to delete warehouse' },

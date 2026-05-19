@@ -1,9 +1,11 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/auth-guard'
 
 // GET /api/inventory/categories - List all categories for a company
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.view')
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     if (!companyId) {
@@ -25,6 +27,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(categories)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Get categories error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch categories' },
@@ -36,6 +41,7 @@ export async function GET(request: NextRequest) {
 // POST /api/inventory/categories - Create category
 export async function POST(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.create')
     const body = await request.json()
     const { companyId, code, nameAr, nameEn, parentId, isActive } = body
 
@@ -96,6 +102,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(category, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Create category error:', error)
     return NextResponse.json(
       { error: 'Failed to create category' },
@@ -107,6 +116,7 @@ export async function POST(request: NextRequest) {
 // PUT /api/inventory/categories - Update category
 export async function PUT(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.edit')
     const body = await request.json()
     const { companyId, id, code, nameAr, nameEn, parentId, isActive } = body
 
@@ -191,6 +201,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(category)
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Update category error:', error)
     return NextResponse.json(
       { error: 'Failed to update category' },
@@ -202,6 +215,7 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/inventory/categories - Delete category
 export async function DELETE(request: NextRequest) {
   try {
+    const user = await requirePermission('inventory.delete')
     const body = await request.json()
     const { companyId, id } = body
 
@@ -256,6 +270,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ message: 'Category deleted successfully' })
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Delete category error:', error)
     return NextResponse.json(
       { error: 'Failed to delete category' },
