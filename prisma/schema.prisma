@@ -76,7 +76,11 @@ model Company {
   investments      Investment[]
   profitDistributions ProfitDistribution[]
   withdrawals      Withdrawal[]
-  stockTransfers   StockTransfer[]
+  stockTransfers    StockTransfer[]
+  materialRequests  MaterialRequest[]
+  deliveryNotes     DeliveryNote[]
+  purchaseReceipts  PurchaseReceipt[]
+  pickLists         PickList[]
 }
 
 model CompanyUser {
@@ -158,6 +162,9 @@ model Warehouse {
   purchaseInvoices PurchaseInvoice[]
   transferFrom     StockTransfer[]  @relation("TransferFrom")
   transferTo       StockTransfer[]  @relation("TransferTo")
+  deliveryNotes    DeliveryNote[]
+  purchaseReceipts PurchaseReceipt[]
+  pickLists        PickList[]
 
   @@unique([companyId, code])
 }
@@ -208,7 +215,11 @@ model Item {
   salesLines      SalesInvoiceLine[]
   purchaseLines   PurchaseInvoiceLine[]
   codes           ItemCode[]
-  transferLines   StockTransferLine[]
+  transferLines        StockTransferLine[]
+  materialRequestLines MaterialRequestLine[]
+  deliveryNoteLines    DeliveryNoteLine[]
+  purchaseReceiptLines PurchaseReceiptLine[]
+  pickListLines        PickListLine[]
 
   @@unique([companyId, code])
 }
@@ -310,6 +321,140 @@ model StockTransferLine {
   item          Item          @relation(fields: [itemId], references: [id])
 }
 
+// ─── Stock Transactions ──────────────────────────────────────────────────────
+
+model MaterialRequest {
+  id           String   @id @default(cuid())
+  companyId    String
+  number       String
+  date         DateTime
+  status       String   @default("DRAFT") // DRAFT, PENDING, APPROVED, FULFILLED, CANCELLED
+  requestedBy  String?
+  approvedBy   String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lines   MaterialRequestLine[]
+
+  @@unique([companyId, number])
+}
+
+model MaterialRequestLine {
+  id               String   @id @default(cuid())
+  materialRequestId String
+  itemId           String
+  quantity         Float
+  fulfilledQty     Float    @default(0)
+  uomId            String?
+  notes            String?
+
+  materialRequest MaterialRequest @relation(fields: [materialRequestId], references: [id], onDelete: Cascade)
+  item            Item            @relation(fields: [itemId], references: [id])
+}
+
+model DeliveryNote {
+  id             String   @id @default(cuid())
+  companyId      String
+  number         String
+  date           DateTime
+  status         String   @default("DRAFT") // DRAFT, CONFIRMED, CANCELLED
+  salesInvoiceId String?
+  customerId     String?
+  warehouseId    String
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesInvoice SalesInvoice?      @relation(fields: [salesInvoiceId], references: [id])
+  customer     Customer?          @relation(fields: [customerId], references: [id])
+  warehouse    Warehouse          @relation(fields: [warehouseId], references: [id])
+  lines        DeliveryNoteLine[]
+
+  @@unique([companyId, number])
+}
+
+model DeliveryNoteLine {
+  id              String   @id @default(cuid())
+  deliveryNoteId  String
+  itemId          String
+  quantity        Float
+  salesInvoiceLineId String?
+  notes           String?
+
+  deliveryNote    DeliveryNote     @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade)
+  item            Item             @relation(fields: [itemId], references: [id])
+}
+
+model PurchaseReceipt {
+  id               String   @id @default(cuid())
+  companyId        String
+  number           String
+  date             DateTime
+  status           String   @default("DRAFT") // DRAFT, CONFIRMED, CANCELLED
+  purchaseInvoiceId String?
+  supplierId       String?
+  warehouseId      String
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company        Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purchaseInvoice PurchaseInvoice?    @relation(fields: [purchaseInvoiceId], references: [id])
+  supplier       Supplier?            @relation(fields: [supplierId], references: [id])
+  warehouse      Warehouse            @relation(fields: [warehouseId], references: [id])
+  lines          PurchaseReceiptLine[]
+
+  @@unique([companyId, number])
+}
+
+model PurchaseReceiptLine {
+  id                 String   @id @default(cuid())
+  purchaseReceiptId  String
+  itemId             String
+  quantity           Float
+  purchaseInvoiceLineId String?
+  notes              String?
+
+  purchaseReceipt PurchaseReceipt @relation(fields: [purchaseReceiptId], references: [id], onDelete: Cascade)
+  item            Item            @relation(fields: [itemId], references: [id])
+}
+
+model PickList {
+  id          String   @id @default(cuid())
+  companyId   String
+  number      String
+  date        DateTime
+  status      String   @default("DRAFT") // DRAFT, IN_PROGRESS, COMPLETED, CANCELLED
+  warehouseId String
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company   Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  warehouse Warehouse       @relation(fields: [warehouseId], references: [id])
+  lines     PickListLine[]
+
+  @@unique([companyId, number])
+}
+
+model PickListLine {
+  id             String   @id @default(cuid())
+  pickListId     String
+  itemId         String
+  quantity       Float
+  pickedQty      Float    @default(0)
+  salesInvoiceId String?
+  notes          String?
+
+  pickList     PickList     @relation(fields: [pickListId], references: [id], onDelete: Cascade)
+  item         Item         @relation(fields: [itemId], references: [id])
+
+  @@map("pick_list_lines")
+}
+
 // ============================================
 // ACCOUNTING MODULE
 // ============================================
@@ -391,6 +536,7 @@ model Customer {
   company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   salesInvoices   SalesInvoice[]
   receiptVouchers ReceiptVoucher[]
+  deliveryNotes   DeliveryNote[]
 
   @@unique([companyId, code])
 }
@@ -419,6 +565,7 @@ model SalesInvoice {
   customer   Customer           @relation(fields: [customerId], references: [id])
   lines      SalesInvoiceLine[]
   receiptLines ReceiptLine[]
+  deliveryNotes DeliveryNote[]
 
   @@unique([companyId, number])
 }
@@ -490,6 +637,7 @@ model Supplier {
   company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   purchaseInvoices PurchaseInvoice[]
   paymentVouchers  PaymentVoucher[]
+  purchaseReceipts PurchaseReceipt[]
 
   @@unique([companyId, code])
 }
@@ -520,6 +668,7 @@ model PurchaseInvoice {
   warehouse  Warehouse           @relation(fields: [warehouseId], references: [id])
   lines      PurchaseInvoiceLine[]
   paymentLines PaymentLine[]
+  purchaseReceipts PurchaseReceipt[]
 
   @@unique([companyId, number])
 }

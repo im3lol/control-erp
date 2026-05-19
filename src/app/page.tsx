@@ -37,6 +37,9 @@ import {
   PieChart,
   TrendingUp,
   HandCoins,
+  ClipboardList,
+  ClipboardCheck,
+  PackageCheck,
   Bell,
   LogOut,
   Activity,
@@ -86,6 +89,10 @@ import StockTransfersList from '@/components/inventory/stock-transfers-list'
 import ItemDetailPage from '@/components/inventory/item-detail-page'
 import StockTransferFormPage from '@/components/inventory/stock-transfer-form-page'
 import ItemBalancesList from '@/components/inventory/item-balances-list'
+import MaterialRequestsList from '@/components/inventory/material-requests-list'
+import DeliveryNotesList from '@/components/inventory/delivery-notes-list'
+import PurchaseReceiptsList from '@/components/inventory/purchase-receipts-list'
+import PickListsList from '@/components/inventory/pick-lists-list'
 import SuppliersList from '@/components/purchases/suppliers-list'
 import PurchaseInvoicesList from '@/components/purchases/purchase-invoices-list'
 import PaymentVouchersList from '@/components/purchases/payment-vouchers-list'
@@ -187,8 +194,12 @@ const navigation: NavItem[] = [
       { id: 'warehouses', label: 'المخازن', icon: Warehouse },
       { id: 'items', label: 'الأصناف', icon: Package },
       { id: 'categories', label: 'الفئات', icon: Tags },
-      { id: 'stock-movements', label: 'حركات المخزن', icon: ArrowLeftRight },
+      { id: 'material-requests', label: 'طلبات المواد', icon: ClipboardList },
       { id: 'stock-transfers', label: 'تحويلات المخزون', icon: ArrowLeftRight },
+      { id: 'delivery-notes', label: 'أذون الصرف', icon: Truck },
+      { id: 'purchase-receipts', label: 'أذون الاستلام', icon: PackageCheck },
+      { id: 'pick-lists', label: 'قوائم التحضير', icon: ClipboardCheck },
+      { id: 'stock-movements', label: 'حركات المخزن', icon: ArrowLeftRight },
       { id: 'item-balances', label: 'أرصدة الأصناف', icon: Scale },
     ],
   },
@@ -266,6 +277,10 @@ const viewTitles: Record<string, string> = {
   'item-detail': 'تفاصيل الصنف',
   'stock-transfer-form': 'تحويل مخزون',
   'item-balances': 'أرصدة الأصناف',
+  'material-requests': 'طلبات المواد',
+  'delivery-notes': 'أذون الصرف',
+  'purchase-receipts': 'أذون الاستلام',
+  'pick-lists': 'قوائم التحضير',
   'journal-entries': 'القيود اليومية',
   customers: 'العملاء',
   'sales-invoices': 'فواتير البيع',
@@ -883,6 +898,14 @@ function AppContent() {
           return <StockTransferFormPage />
         case 'item-balances':
           return <ItemBalancesList />
+        case 'material-requests':
+          return <MaterialRequestsList />
+        case 'delivery-notes':
+          return <DeliveryNotesList />
+        case 'purchase-receipts':
+          return <PurchaseReceiptsList />
+        case 'pick-lists':
+          return <PickListsList />
         default:
           return <ModulePlaceholder title={currentTitle} />
       }
