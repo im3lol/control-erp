@@ -350,7 +350,7 @@ function SidebarNav({
               <CollapsibleTrigger asChild>
                 <button
                   className={cn(
-                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150',
+                    'w-full flex flex-row-reverse items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150',
                     isParentActive
                       ? 'bg-emerald-50 text-emerald-700'
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
@@ -379,7 +379,7 @@ function SidebarNav({
                           onSubClick(item.id, child.id)
                         }}
                         className={cn(
-                          'w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                          'w-full flex flex-row-reverse items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                           isChildActive
                             ? 'bg-emerald-100/70 text-emerald-800 font-medium'
                             : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
@@ -401,7 +401,7 @@ function SidebarNav({
             key={item.id}
             onClick={() => onNavClick(item.id, false)}
             className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150',
+              'w-full flex flex-row-reverse items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150',
               isActive
                 ? 'bg-emerald-50 text-emerald-700'
                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
