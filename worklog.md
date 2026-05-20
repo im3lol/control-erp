@@ -837,3 +837,138 @@ Stage Summary:
 - Monthly trend charts for purchases and sales
 - Top suppliers/customers visualization with progress bars
 
+---
+Task ID: 3
+Agent: full-stack-developer
+Task: Create stock transaction form pages and update list components
+
+Work Log:
+- Created `src/components/inventory/material-request-form-page.tsx` - Full-page form for creating/editing Material Requests
+  - Header with back button navigating to inventory/material-requests
+  - Form fields: date, requestedBy, notes
+  - Lines table with item select, quantity, notes per line
+  - Save as Draft (مسودة) and Submit/Confirm (مؤكد) buttons
+  - Support editing existing requests via editingDocId from store
+  - Barcode scanning input + name search autocomplete for adding items
+  - Status badge in header showing current document status
+- Created `src/components/inventory/delivery-note-form-page.tsx` - Full-page form for creating/editing Delivery Notes
+  - Header with back button navigating to inventory/delivery-notes
+  - Form fields: warehouseId, salesInvoiceId (optional), salesOrderId (optional), customerId, date, notes
+  - Auto-fill customerId and lines when salesInvoiceId or salesOrderId is selected
+  - Lines locked when auto-filled from invoice/order
+  - "إنشاء فاتورة بيع" shortcut button when receipt is CONFIRMED
+  - localStorage support for pendingDeliveryNote from Sales Orders
+  - Barcode scanning + name search
+- Created `src/components/inventory/purchase-receipt-form-page.tsx` - Full-page form for creating/editing Purchase Receipts
+  - Header with back button navigating to inventory/purchase-receipts
+  - Form fields: warehouseId, purchaseOrderId (optional), supplierId, date, notes
+  - Purchase Order auto-fill: supplierId, warehouseId, and remaining qty lines
+  - "إنشاء فاتورة شراء" shortcut button when receipt is CONFIRMED (stores data in localStorage)
+  - localStorage support for pendingPurchaseReceipt from Purchase Orders
+  - Barcode scanning + name search
+- Created `src/components/inventory/pick-list-form-page.tsx` - Full-page form for creating/editing Pick Lists
+  - Header with back button navigating to inventory/pick-lists
+  - Form fields: warehouseId, date, notes
+  - IN_PROGRESS mode: editable pickedQty and notes per line
+  - Save Draft, Submit/Confirm, Update Picked Lines, and Complete Picking buttons
+  - Barcode scanning + name search
+- Updated `src/components/inventory/material-requests-list.tsx` - Removed all Dialog/AlertDialog components
+  - "New" button navigates to material-request-form page with editingDocId='new'
+  - "View" button navigates to material-request-form page with editingDocId=id
+  - Kept inline status action buttons in table rows
+- Updated `src/components/inventory/delivery-notes-list.tsx` - Removed all Dialog/AlertDialog components
+  - "New" button navigates to delivery-note-form page
+  - "View" button navigates to delivery-note-form page
+  - Kept inline status action buttons in table rows
+- Updated `src/components/inventory/purchase-receipts-list.tsx` - Removed all Dialog/AlertDialog components
+  - "New" button navigates to purchase-receipt-form page
+  - "View" button navigates to purchase-receipt-form page
+  - Kept inline status action buttons in table rows
+- Updated `src/components/inventory/pick-lists-list.tsx` - Removed all Dialog/AlertDialog components
+  - "New" button navigates to pick-list-form page
+  - "View" button navigates to pick-list-form page
+  - Kept inline status action buttons and "Generate from Pending Sales" button
+- Lint passes cleanly
+
+Stage Summary:
+- 4 new full-page form components created for Material Requests, Delivery Notes, Purchase Receipts, and Pick Lists
+- All 4 list components updated to remove popup dialogs and use page navigation instead
+- Barcode scanning with item search autocomplete on all form pages
+- Purchase Receipt form has "Create Purchase Invoice" shortcut button when CONFIRMED
+- Delivery Note form has "Create Sales Invoice" shortcut button when CONFIRMED
+- Pick List form supports IN_PROGRESS pickedQty editing
+- All navigation uses setModule/setView/setEditingDocId from Zustand store
+- All components use consistent Arabic RTL UI with emerald/teal color scheme
+
+---
+Task ID: 4-5
+Agent: full-stack-developer
+Task: Add barcode scanning, name search, and document linking shortcuts to PO/SO/PI form pages
+
+Work Log:
+- Updated `src/components/purchases/purchase-order-form-page.tsx`:
+  - Added `ScanLine`, `Search`, `PackageCheck` imports from lucide-react
+  - Added `setEditingDocId` from Zustand store
+  - Added state: `barcodeInput`, `searchQuery`
+  - Added `filteredItems` computed value (filters by Arabic name, English name, or code when query > 1 char)
+  - Added `handleBarcodeScan` - on Enter key, searches `/api/inventory/item-codes?companyId=X&code=Y`, adds new line with found item and sets unitPrice from sellPrice
+  - Added `handleAddItemById` - adds new line with selected item from search dropdown
+  - Added barcode input + name search dropdown above the lines table (only shown when editable)
+  - Added "تحويل لإذن استلام" (Convert to Purchase Receipt) button when status is CONFIRMED
+    - Stores data in localStorage key `pendingPurchaseReceipt` with purchaseOrderId, supplierId, warehouseId, date, lines with remainingQty
+    - Navigates to inventory module, `purchase-receipt-form` view via setEditingDocId('new'), setModule('inventory'), setView('purchase-receipt-form')
+
+- Updated `src/components/sales/sales-order-form-page.tsx`:
+  - Added `ScanLine`, `Search`, `Truck` imports from lucide-react
+  - Added `setEditingDocId` from Zustand store
+  - Added state: `barcodeInput`, `searchQuery`
+  - Added same barcode scanning + name search pattern as PO
+  - Added "تحويل لإذن صرف" (Convert to Delivery Note) button when status is CONFIRMED
+    - Stores data in localStorage key `pendingDeliveryNote` with salesOrderId, customerId, lines with quantity
+    - Navigates to inventory module, `delivery-note-form` view
+
+- Updated `src/components/purchases/purchase-invoice-form-page.tsx`:
+  - Added `ScanLine`, `Search`, `PackageCheck` imports from lucide-react
+  - Added state: `barcodeInput`, `searchQuery`, `purchaseReceipts`, `selectedReceiptId`, `loadingReceipts`
+  - Added same barcode scanning + name search pattern
+  - Added "استدعاء أذون استلام" (Call Purchase Receipts) section with:
+    - Fetch uninvoiced receipts button (fetches all, filters client-side for CONFIRMED + no purchaseInvoiceId)
+    - Select dropdown to choose a receipt
+    - On selection: fetches receipt details, auto-fills supplierId/warehouseId, populates invoice lines with receipt items
+  - All UI in Arabic with amber-themed styling for the receipt linking section
+
+Stage Summary:
+- All 3 form pages now have barcode scanning (Enter key triggers search via item-codes API) and name search with autocomplete dropdown
+- Purchase Order → Purchase Receipt shortcut button added when PO is CONFIRMED
+- Sales Order → Delivery Note shortcut button added when SO is CONFIRMED
+- Purchase Invoice can import lines from uninvoiced Purchase Receipts via "استدعاء أذون استلام" section
+- All existing functionality preserved
+- Lint passes cleanly
+---
+Task ID: 1-6
+Agent: main
+Task: Convert stock transactions to full pages, add barcode scanning, add document linking shortcuts
+
+Work Log:
+- Updated store.ts InventoryView type to add 4 new view IDs: material-request-form, delivery-note-form, purchase-receipt-form, pick-list-form
+- Updated page.tsx with imports for 4 new form page components and routing in the inventory switch block
+- Updated page.tsx viewTitles with Arabic labels for the 4 new form views
+- Created 4 full-page form components via subagent:
+  - material-request-form-page.tsx (barcode scan + name search + save/submit)
+  - delivery-note-form-page.tsx (barcode scan + name search + sales order/invoice linking + save/submit)
+  - purchase-receipt-form-page.tsx (barcode scan + name search + PO linking + PI shortcut + save/submit)
+  - pick-list-form-page.tsx (barcode scan + name search + editable pickedQty + save/submit)
+- Updated 4 list components via subagent to remove Dialog popups and navigate to form pages
+- Added barcode scanning + name search to Purchase Order, Sales Order, Purchase Invoice form pages via subagent
+- Added PO → PR shortcut (تحويل لإذن استلام) in Purchase Order form page
+- Added SO → DN shortcut (تحويل لإذن صرف) in Sales Order form page
+- Added PR → PI shortcut (إنشاء فاتورة شراء) in Purchase Receipt form page
+- Added PI → PR linking (استدعاء أذون استلام) in Purchase Invoice form page
+- All lint checks pass cleanly
+- Dev server compiles without errors
+
+Stage Summary:
+- All 4 stock transaction types (Material Request, Delivery Note, Purchase Receipt, Pick List) are now full pages instead of popup dialogs
+- Barcode scanning and name search added to all order/receipt/invoice form pages
+- Document linking shortcuts added: PO→PR, SO→DN, PR→PI, PI→PR
+- Save (مسودة) and Submit (مؤكد) workflow implemented in all form pages

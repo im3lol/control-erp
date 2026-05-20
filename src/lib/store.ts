@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 export type Module = 'dashboard' | 'settings' | 'inventory' | 'accounting' | 'sales' | 'purchases' | 'reports' | 'investors'
 type SettingsView = 'company' | 'currencies' | 'uom' | 'users' | 'chart-of-accounts'
-type InventoryView = 'warehouses' | 'items' | 'categories' | 'stock-movements' | 'item-balances' | 'item-detail' | 'stock-transfer-form' | 'material-requests' | 'delivery-notes' | 'purchase-receipts' | 'pick-lists'
+type InventoryView = 'warehouses' | 'items' | 'categories' | 'stock-movements' | 'item-balances' | 'item-detail' | 'stock-transfer-form' | 'material-requests' | 'material-request-form' | 'delivery-notes' | 'delivery-note-form' | 'purchase-receipts' | 'purchase-receipt-form' | 'pick-lists' | 'pick-list-form'
 type AccountingView = 'journal-entries' | 'chart-of-accounts'
 type SalesView = 'customers' | 'sales-invoices' | 'receipt-vouchers' | 'sales-orders' | 'customer-form' | 'sales-order-form' | 'sales-invoice-form'
 type PurchasesView = 'suppliers' | 'purchase-invoices' | 'purchase-orders' | 'supplier-form' | 'purchase-order-form' | 'purchase-invoice-form'

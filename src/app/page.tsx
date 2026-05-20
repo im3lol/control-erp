@@ -94,6 +94,10 @@ import DeliveryNotesList from '@/components/inventory/delivery-notes-list'
 import PurchaseReceiptsList from '@/components/inventory/purchase-receipts-list'
 import InventoryDashboard from '@/components/inventory/inventory-dashboard'
 import PickListsList from '@/components/inventory/pick-lists-list'
+import MaterialRequestFormPage from '@/components/inventory/material-request-form-page'
+import DeliveryNoteFormPage from '@/components/inventory/delivery-note-form-page'
+import PurchaseReceiptFormPage from '@/components/inventory/purchase-receipt-form-page'
+import PickListFormPage from '@/components/inventory/pick-list-form-page'
 import PurchasesDashboard from '@/components/purchases/purchases-dashboard'
 import SuppliersList from '@/components/purchases/suppliers-list'
 import PurchaseInvoicesList from '@/components/purchases/purchase-invoices-list'
@@ -289,9 +293,13 @@ const viewTitles: Record<string, string> = {
   'stock-transfer-form': 'تحويل مخزون',
   'item-balances': 'أرصدة الأصناف',
   'material-requests': 'طلبات المواد',
+  'material-request-form': 'طلب مواد جديد',
   'delivery-notes': 'أذون الصرف',
+  'delivery-note-form': 'إذن صرف جديد',
   'purchase-receipts': 'أذون الاستلام',
+  'purchase-receipt-form': 'إذن استلام جديد',
   'pick-lists': 'قوائم التحضير',
+  'pick-list-form': 'قائمة تحضير جديدة',
   'journal-entries': 'القيود اليومية',
   customers: 'العملاء',
   'sales-orders': 'أوامر البيع',
@@ -919,12 +927,20 @@ function AppContent() {
           return <ItemBalancesList />
         case 'material-requests':
           return <MaterialRequestsList />
+        case 'material-request-form':
+          return <MaterialRequestFormPage />
         case 'delivery-notes':
           return <DeliveryNotesList />
+        case 'delivery-note-form':
+          return <DeliveryNoteFormPage />
         case 'purchase-receipts':
           return <PurchaseReceiptsList />
+        case 'purchase-receipt-form':
+          return <PurchaseReceiptFormPage />
         case 'pick-lists':
           return <PickListsList />
+        case 'pick-list-form':
+          return <PickListFormPage />
         default:
           return <ModulePlaceholder title={currentTitle} />
       }

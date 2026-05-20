@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
   Save, Send, ArrowRight, Loader2, FileText, Plus, XCircle,
+  ScanLine, Search, Truck,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -108,6 +109,7 @@ export default function SalesOrderFormPage() {
   const setModule = useAppStore(state => state.setModule)
   const setView = useAppStore(state => state.setView)
   const editingDocId = useAppStore(state => state.editingDocId)
+  const setEditingDocId = useAppStore(state => state.setEditingDocId)
 
   const [customers, setCustomers] = useState<Customer[]>([])
   const [items, setItems] = useState<Item[]>([])
@@ -125,6 +127,8 @@ export default function SalesOrderFormPage() {
   const [currentStatus, setCurrentStatus] = useState<string>('DRAFT')
   const [orderNumber, setOrderNumber] = useState<string>('')
   const [orderId, setOrderId] = useState<string>('')
+  const [barcodeInput, setBarcodeInput] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Load editing order
   useEffect(() => {
@@ -394,6 +398,69 @@ export default function SalesOrderFormPage() {
     }
   }
 
+  // ── Barcode & Search ──
+
+  const filteredItems = searchQuery.length > 1
+    ? items.filter(it =>
+        (it.nameAr && it.nameAr.includes(searchQuery)) ||
+        (it.nameEn && it.nameEn.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        it.code.includes(searchQuery)
+      )
+    : []
+
+  const handleBarcodeScan = async (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' || !barcodeInput.trim()) return
+    try {
+      const res = await fetch(`/api/inventory/item-codes?companyId=${companyId}&code=${encodeURIComponent(barcodeInput.trim())}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.itemId) {
+          const item = items.find(i => i.id === data.itemId)
+          addLine()
+          const newLines = [...orderLines, { ...emptyLine }]
+          const lastIdx = newLines.length - 1
+          newLines[lastIdx] = { ...newLines[lastIdx], itemId: data.itemId, unitPrice: String(item?.sellPrice || 0) }
+          newLines[lastIdx].totalAmount = calcLineTotal(newLines[lastIdx])
+          setOrderLines(newLines)
+          setBarcodeInput('')
+          toast.success('تم إضافة الصنف')
+        } else {
+          toast.error('لم يتم العثور على صنف بهذا الباركود')
+        }
+      }
+    } catch {
+      toast.error('حدث خطأ في البحث')
+    }
+  }
+
+  const handleAddItemById = (itemId: string) => {
+    const item = items.find(i => i.id === itemId)
+    addLine()
+    const newLines = [...orderLines, { ...emptyLine }]
+    const lastIdx = newLines.length - 1
+    newLines[lastIdx] = { ...newLines[lastIdx], itemId, unitPrice: String(item?.sellPrice || 0) }
+    newLines[lastIdx].totalAmount = calcLineTotal(newLines[lastIdx])
+    setOrderLines(newLines)
+    setSearchQuery('')
+  }
+
+  // ── Convert to Delivery Note ──
+
+  const handleConvertToDeliveryNote = () => {
+    const validLines = orderLines.filter(l => l.itemId)
+    localStorage.setItem('pendingDeliveryNote', JSON.stringify({
+      salesOrderId: orderId,
+      customerId: orderCustomerId,
+      lines: validLines.map(l => ({
+        itemId: l.itemId,
+        quantity: parseFloat(l.quantity) - (0),
+      })),
+    }))
+    setEditingDocId('new')
+    setModule('inventory')
+    setView('delivery-note-form')
+  }
+
   const totals = calcOrderTotals()
   const isEditable = currentStatus === 'DRAFT' || currentStatus === 'NEW'
 
@@ -434,6 +501,16 @@ export default function SalesOrderFormPage() {
           <Button variant="outline" onClick={handleGoBack}>
             إلغاء
           </Button>
+          {currentStatus === 'CONFIRMED' && (
+            <Button
+              variant="outline"
+              onClick={handleConvertToDeliveryNote}
+              className="gap-2 border-amber-200 text-amber-700 hover:bg-amber-50"
+            >
+              <Truck className="h-4 w-4" />
+              تحويل لإذن صرف
+            </Button>
+          )}
           {isEditable && (
             <>
               <Button
@@ -526,6 +603,45 @@ export default function SalesOrderFormPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
+            {/* Barcode & Search */}
+            {isEditable && (
+              <div className="flex gap-2 mb-3">
+                <div className="flex-1 relative">
+                  <ScanLine className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder="مسح الباركود..."
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    onKeyDown={handleBarcodeScan}
+                    className="pr-10 h-9"
+                    dir="ltr"
+                  />
+                </div>
+                <div className="flex-1 relative">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder="بحث بالاسم..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pr-10 h-9"
+                  />
+                  {searchQuery && filteredItems.length > 0 && (
+                    <div className="absolute top-full right-0 left-0 bg-white border rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto mt-1">
+                      {filteredItems.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => handleAddItemById(item.id)}
+                          className="w-full text-right px-3 py-2 text-sm hover:bg-emerald-50 border-b last:border-0"
+                        >
+                          {item.nameAr || item.nameEn || item.code} ({item.code})
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Header row */}
             <div className="grid grid-cols-12 gap-2 px-1">
               <div className="col-span-3 text-xs font-semibold text-slate-500">الصنف</div>
