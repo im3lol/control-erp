@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Users, ClipboardCheck, FileText, ShoppingCart, Receipt,
-  TrendingUp, AlertTriangle, ArrowRight, Loader2,
+  TrendingUp, AlertTriangle, ArrowRight, Loader2, Undo2,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -106,6 +106,7 @@ export default function SalesDashboard() {
     { id: 'new-invoice', label: 'فاتورة بيع جديدة', description: 'إنشاء فاتورة بيع', icon: FileText, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', viewId: 'sales-invoice-form' },
     { id: 'orders', label: 'أوامر البيع', description: 'عرض أوامر البيع', icon: ShoppingCart, color: 'text-teal-600', bg: 'bg-teal-50', border: 'border-teal-200', viewId: 'sales-orders' },
     { id: 'invoices', label: 'فواتير البيع', description: 'عرض فواتير البيع', icon: Receipt, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200', viewId: 'sales-invoices' },
+    { id: 'sales-returns', label: 'مرتجعات المبيعات', description: 'عرض المرتجعات', icon: Undo2, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', viewId: 'sales-returns' },
   ]
 
   // ── Stat Cards Definition ──
@@ -210,7 +211,7 @@ export default function SalesDashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {quickActions.map((action) => (
               <button
                 key={action.id}

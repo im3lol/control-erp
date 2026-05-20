@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
   Save, Send, Loader2, FileText, Plus, XCircle,
-  ScanLine, Search, Truck, ClipboardList, Package, Calculator,
+  ScanLine, Search, Truck, ClipboardList, Package, Calculator, Undo2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -428,6 +428,30 @@ export default function SalesOrderFormPage() {
     setSearchQuery('')
   }
 
+  // ── Create Sales Return shortcut ──
+
+  const handleCreateReturn = () => {
+    const returnData = {
+      sourceType: 'salesOrder' as const,
+      sourceId: orderId,
+      sourceNumber: orderNumber,
+      customerId: orderCustomerId,
+      customerName: customers.find(c => c.id === orderCustomerId)?.nameAr || '',
+      warehouseId: '',
+      lines: orderLines.filter(l => l.itemId && parseFloat(l.quantity) > 0).map(l => ({
+        itemId: l.itemId,
+        itemCode: items.find(i => i.id === l.itemId)?.code || '',
+        itemName: items.find(i => i.id === l.itemId)?.nameAr || '',
+        quantity: parseFloat(l.quantity),
+        unitPrice: parseFloat(l.unitPrice) || 0,
+      })),
+    }
+    localStorage.setItem('pendingSalesReturn', JSON.stringify(returnData))
+    setEditingDocId('new')
+    setModule('sales')
+    setView('sales-return-form')
+  }
+
   // ── Convert to Delivery Note ──
 
   const handleConvertToDeliveryNote = () => {
@@ -487,6 +511,12 @@ export default function SalesOrderFormPage() {
                   icon: Truck,
                   onClick: handleConvertToDeliveryNote,
                   className: 'border-amber-200 text-amber-700 hover:bg-amber-50',
+                },
+                {
+                  label: 'إنشاء مرتجع',
+                  icon: Undo2,
+                  onClick: handleCreateReturn,
+                  className: 'border-red-200 text-red-700 hover:bg-red-50',
                 },
               ]
             : undefined

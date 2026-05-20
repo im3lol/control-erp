@@ -47,6 +47,7 @@ import {
   PanelRightOpen,
   Check,
   ChevronsUpDown,
+  Undo2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -106,6 +107,8 @@ import PurchaseInvoicesList from '@/components/purchases/purchase-invoices-list'
 import SupplierFormPage from '@/components/purchases/supplier-form-page'
 import PurchaseOrderFormPage from '@/components/purchases/purchase-order-form-page'
 import PurchaseInvoiceFormPage from '@/components/purchases/purchase-invoice-form-page'
+import PurchaseReturnFormPage from '@/components/purchases/purchase-return-form-page'
+import PurchaseReturnsList from '@/components/purchases/purchase-returns-list'
 import PurchaseOrdersList from '@/components/purchases/purchase-orders-list'
 import SalesDashboard from '@/components/sales/sales-dashboard'
 import CustomersList from '@/components/sales/customers-list'
@@ -114,6 +117,8 @@ import SalesInvoicesList from '@/components/sales/sales-invoices-list'
 import SalesInvoiceFormPage from '@/components/sales/sales-invoice-form-page'
 import SalesOrdersList from '@/components/sales/sales-orders-list'
 import SalesOrderFormPage from '@/components/sales/sales-order-form-page'
+import SalesReturnFormPage from '@/components/sales/sales-return-form-page'
+import SalesReturnsList from '@/components/sales/sales-returns-list'
 import TrialBalanceReport from '@/components/reports/trial-balance'
 import BalanceSheetReport from '@/components/reports/balance-sheet'
 import IncomeStatementReport from '@/components/reports/income-statement'
@@ -199,6 +204,7 @@ const navigation: NavItem[] = [
       { id: 'suppliers', label: 'الموردين', icon: Building2 },
       { id: 'purchase-orders', label: 'أوامر الشراء', icon: ClipboardList },
       { id: 'purchase-invoices', label: 'فواتير الشراء', icon: FileText },
+      { id: 'purchase-returns', label: 'مرتجعات المشتريات', icon: Undo2 },
     ],
   },
   {
@@ -226,6 +232,7 @@ const navigation: NavItem[] = [
       { id: 'customers', label: 'العملاء', icon: Users },
       { id: 'sales-orders', label: 'أوامر البيع', icon: ClipboardCheck },
       { id: 'sales-invoices', label: 'فواتير البيع', icon: FileText },
+      { id: 'sales-returns', label: 'مرتجعات المبيعات', icon: Undo2 },
     ],
   },
   {
@@ -309,12 +316,16 @@ const viewTitles: Record<string, string> = {
   'customer-form': 'إضافة عميل',
   'sales-order-form': 'أمر بيع جديد',
   'sales-invoice-form': 'فاتورة بيع جديدة',
+  'sales-return-form': 'مرتجع مبيعات جديد',
+  'sales-returns': 'مرتجعات المبيعات',
   suppliers: 'الموردين',
   'purchase-orders': 'أوامر الشراء',
   'purchase-invoices': 'فواتير الشراء',
   'supplier-form': 'إضافة مورد',
   'purchase-order-form': 'أمر شراء جديد',
   'purchase-invoice-form': 'فاتورة شراء جديدة',
+  'purchase-return-form': 'مرتجع مشتريات جديد',
+  'purchase-returns': 'مرتجعات المشتريات',
   'trial-balance': 'ميزان المراجعة',
   'balance-sheet': 'الميزانية العمومية',
   'income-statement': 'قائمة الدخل',
@@ -974,6 +985,10 @@ function AppContent() {
           return <SalesInvoicesList />
         case 'sales-invoice-form':
           return <SalesInvoiceFormPage />
+        case 'sales-return-form':
+          return <SalesReturnFormPage />
+        case 'sales-returns':
+          return <SalesReturnsList />
         default:
           return <ModulePlaceholder title={currentTitle} />
       }
@@ -993,6 +1008,10 @@ function AppContent() {
           return <PurchaseInvoicesList />
         case 'purchase-invoice-form':
           return <PurchaseInvoiceFormPage />
+        case 'purchase-return-form':
+          return <PurchaseReturnFormPage />
+        case 'purchase-returns':
+          return <PurchaseReturnsList />
         default:
           return <ModulePlaceholder title={currentTitle} />
       }

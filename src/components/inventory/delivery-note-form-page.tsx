@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
   Save, Send, Loader2, Truck, Plus, XCircle,
-  ScanLine, Search, FileText, Package, ClipboardList,
+  ScanLine, Search, FileText, Package, ClipboardList, Undo2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -569,6 +569,30 @@ export default function DeliveryNoteFormPage() {
     }
   }
 
+  // ── Create Sales Return shortcut ──
+
+  const handleCreateReturn = () => {
+    const returnData = {
+      sourceType: 'deliveryNote' as const,
+      sourceId: noteId,
+      sourceNumber: noteNumber,
+      customerId: noteCustomerId,
+      customerName: customers.find(c => c.id === noteCustomerId)?.nameAr || '',
+      warehouseId: noteWarehouseId,
+      lines: noteLines.filter(l => l.itemId && parseFloat(l.quantity) > 0).map(l => ({
+        itemId: l.itemId,
+        itemCode: items.find(i => i.id === l.itemId)?.code || '',
+        itemName: items.find(i => i.id === l.itemId)?.nameAr || '',
+        quantity: parseFloat(l.quantity),
+        unitPrice: 0,
+      })),
+    }
+    localStorage.setItem('pendingSalesReturn', JSON.stringify(returnData))
+    useAppStore.getState().setEditingDocId('new')
+    useAppStore.getState().setModule('sales')
+    useAppStore.getState().setView('sales-return-form')
+  }
+
   // ── Create Sales Invoice shortcut ──
 
   const handleCreateSalesInvoice = () => {
@@ -640,6 +664,12 @@ export default function DeliveryNoteFormPage() {
                   icon: FileText,
                   onClick: handleCreateSalesInvoice,
                   className: 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600',
+                },
+                {
+                  label: 'إنشاء مرتجع',
+                  icon: Undo2,
+                  onClick: handleCreateReturn,
+                  className: 'border-red-200 text-red-700 hover:bg-red-50',
                 },
               ]
             : undefined

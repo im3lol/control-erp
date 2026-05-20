@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
   Save, Send, Loader2, FileText, Plus, XCircle,
-  ScanLine, Search, PackageCheck, Receipt, Package, Calculator,
+  ScanLine, Search, PackageCheck, Receipt, Package, Calculator, Undo2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -551,6 +551,30 @@ export default function PurchaseInvoiceFormPage() {
     }
   }
 
+  // ── Create Purchase Return shortcut ──
+
+  const handleCreateReturn = () => {
+    const returnData = {
+      sourceType: 'purchaseInvoice' as const,
+      sourceId: invoiceId,
+      sourceNumber: invoiceNumber,
+      supplierId: invoiceSupplierId,
+      supplierName: suppliers.find(s => s.id === invoiceSupplierId)?.nameAr || '',
+      warehouseId: invoiceWarehouseId,
+      lines: invoiceLines.filter(l => l.itemId && parseFloat(l.quantity) > 0).map(l => ({
+        itemId: l.itemId,
+        itemCode: items.find(i => i.id === l.itemId)?.code || '',
+        itemName: items.find(i => i.id === l.itemId)?.nameAr || '',
+        quantity: parseFloat(l.quantity),
+        unitPrice: parseFloat(l.unitPrice) || 0,
+      })),
+    }
+    localStorage.setItem('pendingPurchaseReturn', JSON.stringify(returnData))
+    useAppStore.getState().setEditingDocId('new')
+    useAppStore.getState().setModule('purchases')
+    useAppStore.getState().setView('purchase-return-form')
+  }
+
   const totals = calcInvoiceTotals()
   const isEditable = currentStatus === 'DRAFT' || currentStatus === 'NEW'
 
@@ -596,6 +620,18 @@ export default function PurchaseInvoiceFormPage() {
         status={currentStatus}
         subtitle={invoiceId ? 'تعديل أو تأكيد فاتورة الشراء' : 'إنشاء فاتورة شراء جديدة من المورد'}
         onGoBack={handleGoBack}
+        shortcutActions={
+          currentStatus === 'CONFIRMED'
+            ? [
+                {
+                  label: 'إنشاء مرتجع',
+                  icon: Undo2,
+                  onClick: handleCreateReturn,
+                  className: 'border-red-200 text-red-700 hover:bg-red-50',
+                },
+              ]
+            : undefined
+        }
         primaryActions={
           isEditable
             ? [

@@ -4,8 +4,8 @@ export type Module = 'dashboard' | 'settings' | 'inventory' | 'accounting' | 'sa
 type SettingsView = 'companies' | 'company' | 'currencies' | 'uom' | 'users' | 'chart-of-accounts'
 type InventoryView = 'warehouses' | 'items' | 'categories' | 'stock-movements' | 'item-balances' | 'item-detail' | 'stock-transfer-form' | 'material-requests' | 'material-request-form' | 'delivery-notes' | 'delivery-note-form' | 'purchase-receipts' | 'purchase-receipt-form' | 'pick-lists' | 'pick-list-form'
 type AccountingView = 'journal-entries' | 'chart-of-accounts'
-type SalesView = 'customers' | 'sales-invoices' | 'sales-orders' | 'customer-form' | 'sales-order-form' | 'sales-invoice-form'
-type PurchasesView = 'suppliers' | 'purchase-invoices' | 'purchase-orders' | 'supplier-form' | 'purchase-order-form' | 'purchase-invoice-form'
+type SalesView = 'customers' | 'sales-invoices' | 'sales-orders' | 'customer-form' | 'sales-order-form' | 'sales-invoice-form' | 'sales-returns' | 'sales-return-form'
+type PurchasesView = 'suppliers' | 'purchase-invoices' | 'purchase-orders' | 'supplier-form' | 'purchase-order-form' | 'purchase-invoice-form' | 'purchase-returns' | 'purchase-return-form'
 type ReportsView = 'trial-balance' | 'balance-sheet' | 'income-statement' | 'inventory-report' | 'sales-report' | 'purchase-report' | 'customer-aging' | 'supplier-aging'
 type InvestorsView = 'investors-list'
 

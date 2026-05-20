@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Building2, ClipboardList, FileText, PackageCheck, Receipt,
-  TrendingUp, AlertTriangle, ArrowRight, Loader2,
+  TrendingUp, AlertTriangle, ArrowRight, Loader2, Undo2,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -85,6 +85,7 @@ export default function PurchasesDashboard() {
     { id: 'purchase-invoice-form', label: 'فاتورة شراء جديدة', description: 'إنشاء فاتورة شراء', icon: FileText, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', viewId: 'purchase-invoice-form' },
     { id: 'purchase-orders', label: 'أوامر الشراء', description: 'عرض أوامر الشراء', icon: PackageCheck, color: 'text-teal-600', bg: 'bg-teal-50', border: 'border-teal-200', viewId: 'purchase-orders' },
     { id: 'purchase-invoices', label: 'فواتير الشراء', description: 'عرض فواتير الشراء', icon: Receipt, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200', viewId: 'purchase-invoices' },
+    { id: 'purchase-returns', label: 'مرتجعات المشتريات', description: 'عرض المرتجعات', icon: Undo2, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', viewId: 'purchase-returns' },
   ]
 
   // ── Stat Cards Definition ──
@@ -206,7 +207,7 @@ export default function PurchasesDashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {quickActions.map((action) => (
               <button
                 key={action.id}

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
   Save, Send, Loader2, FileText, Plus, XCircle,
-  ScanLine, Search, PackageCheck, ClipboardList, Package, Calculator,
+  ScanLine, Search, PackageCheck, ClipboardList, Package, Calculator, Undo2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -466,6 +466,30 @@ export default function PurchaseOrderFormPage() {
     setSearchQuery('')
   }
 
+  // ── Create Purchase Return shortcut ──
+
+  const handleCreateReturn = () => {
+    const returnData = {
+      sourceType: 'purchaseOrder' as const,
+      sourceId: orderId,
+      sourceNumber: orderNumber,
+      supplierId: orderSupplierId,
+      supplierName: suppliers.find(s => s.id === orderSupplierId)?.nameAr || '',
+      warehouseId: orderWarehouseId,
+      lines: orderLines.filter(l => l.itemId && parseFloat(l.quantity) > 0).map(l => ({
+        itemId: l.itemId,
+        itemCode: items.find(i => i.id === l.itemId)?.code || '',
+        itemName: items.find(i => i.id === l.itemId)?.nameAr || '',
+        quantity: parseFloat(l.quantity),
+        unitPrice: parseFloat(l.unitPrice) || 0,
+      })),
+    }
+    localStorage.setItem('pendingPurchaseReturn', JSON.stringify(returnData))
+    setEditingDocId('new')
+    setModule('purchases')
+    setView('purchase-return-form')
+  }
+
   // ── Convert to Purchase Receipt ──
 
   const handleConvertToPurchaseReceipt = () => {
@@ -527,6 +551,12 @@ export default function PurchaseOrderFormPage() {
                   icon: PackageCheck,
                   onClick: handleConvertToPurchaseReceipt,
                   className: 'border-amber-200 text-amber-700 hover:bg-amber-50',
+                },
+                {
+                  label: 'إنشاء مرتجع',
+                  icon: Undo2,
+                  onClick: handleCreateReturn,
+                  className: 'border-red-200 text-red-700 hover:bg-red-50',
                 },
               ]
             : undefined

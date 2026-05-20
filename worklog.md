@@ -393,3 +393,349 @@ Stage Summary:
 - All shortcuts are functional and navigate to correct views
 - Financial summary shows balance indicator (balanced vs unbalanced)
 - Monthly activity shows debit/credit trend visualization
+
+---
+Task ID: 2
+Agent: Purchase Returns API Agent
+Task: Create Purchase Returns API endpoints
+
+Work Log:
+- Read worklog.md to understand previous agent work (UI/UX refactoring, accounting dashboard)
+- Read existing purchase orders API (route.ts + [id]/route.ts) as pattern reference
+- Read purchase receipts API ([id]/route.ts) for stock movement/ItemBalance update patterns
+- Read Prisma schema to confirm PurchaseReturn and PurchaseReturnLine model structure
+- Read auth-guard.ts to confirm requirePermission usage
+- Read erp-utils.ts to confirm generateDocNumber signature
+- Created /api/purchases/returns/route.ts with GET and POST handlers
+  - GET: List purchase returns for a company with status, supplierId, fromDate/toDate filters; includes lines with item details, supplier, warehouse, and linked documents (purchaseOrder, purchaseInvoice, purchaseReceipt)
+  - POST: Create new purchase return with auto-generated number (PRET-{YYYY}-{0001}); validates supplier, warehouse, and linked documents; calculates totalAmount from lines; defaults status to DRAFT
+- Created /api/purchases/returns/[id]/route.ts with GET and PUT handlers
+  - GET: Get single purchase return with full details (lines with item info + uom, supplier, warehouse, linked documents)
+  - PUT: Three action handlers:
+    - "confirm": Changes DRAFT→CONFIRMED, creates OUT stock movements for each line, updates ItemBalance (reduces quantity and recalculates avgCost), checks sufficient stock before confirming
+    - "cancel": Changes DRAFT→CANCELLED only (no stock reversal needed since DRAFT never affected stock)
+    - "update": Updates fields while still DRAFT, supports line replacement with recalculation
+- Created directory structure: /api/purchases/returns/ and /api/purchases/returns/[id]/
+- Lint passes cleanly with no errors
+- Dev server running on port 3000 (HTTP 200)
+
+Stage Summary:
+- Created 2 API route files for Purchase Returns module
+- GET /api/purchases/returns — List with filters and full includes
+- POST /api/purchases/returns — Create with PRET-{YYYY}-{0001} numbering, validation, auto-calculation
+- GET /api/purchases/returns/[id] — Single return with full details
+- PUT /api/purchases/returns/[id] — Confirm (with stock movements OUT + ItemBalance updates), Cancel (DRAFT only), Update (DRAFT only)
+- Follows same patterns as purchase orders API and purchase receipts stock movement logic
+- Uses requirePermission for auth (purchases.view, purchases.create, purchases.confirm, purchases.edit)
+
+---
+Task ID: 3
+Agent: Sales Returns API Agent
+Task: Create Sales Returns API endpoints
+
+Work Log:
+- Read worklog.md to understand previous agent work (UI/UX refactoring, accounting dashboard, purchase returns API)
+- Read existing sales orders API (route.ts + [id]/route.ts) as pattern reference
+- Read delivery notes API ([id]/route.ts) for stock movement/ItemBalance update patterns on confirm
+- Read Prisma schema to confirm SalesReturn and SalesReturnLine model structure
+- Read auth-guard.ts to confirm requirePermission usage
+- Read erp-utils.ts to confirm generateDocNumber signature
+- Created /api/sales/returns/route.ts with GET and POST handlers
+  - GET: List sales returns for a company with status, customerId, fromDate/toDate filters; includes lines with item details, customer, warehouse, and linked documents (salesOrder, salesInvoice, deliveryNote)
+  - POST: Create new sales return with auto-generated number (SRET-{YYYY}-{0001}); validates customer, warehouse, and linked documents; calculates totalAmount from lines (qty * unitPrice per line); defaults status to DRAFT
+- Created /api/sales/returns/[id]/route.ts with GET and PUT handlers
+  - GET: Get single sales return with full details (lines with item info + uom, customer, warehouse, linked documents)
+  - PUT: Three action handlers:
+    - "confirm": Changes DRAFT→CONFIRMED using $transaction; creates IN stock movements for each line (items returning to warehouse), updates ItemBalance (increases quantity and recalculates avgCost using weighted average); creates ItemBalance record if none exists
+    - "cancel": Changes DRAFT→CANCELLED only
+    - "update": Updates fields while still DRAFT, validates changed customer/warehouse/linked docs, supports line replacement with totalAmount recalculation
+- Created directory structure: /api/sales/returns/ and /api/sales/returns/[id]/
+- Lint passes cleanly with no errors
+
+Stage Summary:
+- Created 2 API route files for Sales Returns module
+- GET /api/sales/returns — List with filters (status, customerId, date range) and full includes (lines with items, customer, warehouse, linked documents)
+- POST /api/sales/returns — Create with SRET-{YYYY}-{0001} numbering, validation of customer/warehouse/linked docs, auto-calculation of totalAmount from lines
+- GET /api/sales/returns/[id] — Single return with full details (lines with item + uom, customer, warehouse, linked documents)
+- PUT /api/sales/returns/[id] — Confirm (with IN stock movements + ItemBalance weighted average updates), Cancel (DRAFT only), Update (DRAFT only with line replacement)
+- Follows same patterns as sales orders API and delivery notes stock movement logic
+- Uses requirePermission for auth (sales.view, sales.create, sales.edit)
+
+---
+Task ID: 5
+Agent: Sales Return Form Agent
+Task: Create SalesReturnFormPage component for creating and editing sales returns (مرتجع مبيعات)
+
+Work Log:
+- Read worklog.md to understand previous agent work (UI/UX refactoring, sales returns API by Task 3)
+- Read sales-order-form-page.tsx as the primary design pattern reference
+- Read all shared components: DocumentPageHeader, getDocumentStatusBadge, DocumentSection, LinkedDocumentBadge, WorkflowStepper, getSalesWorkflow
+- Read sales returns API endpoints (route.ts + [id]/route.ts) to understand data structure and actions
+- Read store.ts for useAppStore interface (editingDocId, setView, setModule, etc.)
+- Read erp-utils.ts for formatCurrency, formatDate utilities
+- Created src/components/sales/sales-return-form-page.tsx with the following structure:
+  - DocumentPageHeader using Undo2 icon with red styling (bg-red-50, text-red-600) — return/reverse operation identity
+  - WorkflowStepper showing sales workflow + return step: أمر البيع → إذن الصرف → فاتورة البيع → مرتجع البيع
+    - مرتجع البيع: "current" when DRAFT, "completed" when CONFIRMED/CANCELLED
+    - Linked document numbers shown via LinkedDocumentBadge
+  - Info Section (DocumentSection): Date, Customer (select), Warehouse (select), linked document reference (read-only)
+  - Lines Section (DocumentSection, noPadding):
+    - Table columns: كود الصنف, اسم الصنف, الكمية, السعر, الإجمالي, حذف
+    - Barcode & search area with red hover styling
+    - Alternating row backgrounds
+    - Original quantity reference from source document shown as small text
+  - Totals Section (DocumentSection): Item count, total quantity, total amount (text-2xl, red-600)
+  - Notes Section (DocumentSection): Textarea for notes
+- Pre-fill logic from localStorage key `pendingSalesReturn`:
+  - Reads sourceType, sourceId, sourceNumber, customerId, warehouseId, lines
+  - Pre-fills customer, warehouse, and lines from source document
+  - Sets linked document IDs based on sourceType (salesOrder/salesInvoice/deliveryNote)
+  - Clears localStorage key after reading
+  - Shows linked document number as read-only in info section
+- Workflow:
+  - DRAFT: Can edit, save, confirm
+  - CONFIRMED: Read-only, no actions
+  - CANCELLED: Read-only
+- Actions:
+  - "حفظ كمسودة" (Save Draft) — always when DRAFT
+  - "تأكيد المرتجع" (Confirm Return) — only when DRAFT, with red styling (bg-red-600)
+- Store integration:
+  - Uses editingDocId to determine new vs edit mode
+  - Navigates to 'sales-returns' view on go back
+  - Clears editingDocId on back navigation
+- Data fetching:
+  - Customers: /api/sales/customers?companyId=${companyId}
+  - Warehouses: /api/inventory/warehouses?companyId=${companyId}
+  - Items: /api/inventory/items?companyId=${companyId}
+- Lint passes cleanly (0 errors, 0 warnings in this file)
+
+Changes Summary:
+- Created: src/components/sales/sales-return-form-page.tsx (~520 lines)
+- Red color identity for sales return document (bg-red-50, text-red-600) — reverse operation, distinct from other document types
+- Undo2 icon for document type identity
+- Full localStorage pre-fill from pendingSalesReturn key
+- Workflow stepper extends sales workflow with return step
+- LinkedDocumentBadge for sales order, delivery note, sales invoice references
+- RTL Arabic maintained throughout
+- Follows exact same code style as sales-order-form-page.tsx
+
+---
+Task ID: 4
+Agent: Purchase Return Form Agent
+Task: Create PurchaseReturnFormPage component for creating and editing purchase returns (مرتجع مشتريات)
+
+Work Log:
+- Read worklog.md to understand previous agent work (UI/UX refactoring, purchase returns API by Task 2, sales returns API by Task 3, sales return form by Task 5)
+- Read purchase-order-form-page.tsx as the primary design pattern reference
+- Read purchase-invoice-form-page.tsx for additional pattern reference (orange styling, linked documents)
+- Read all shared components: DocumentPageHeader, getDocumentStatusBadge, DocumentSection, LinkedDocumentBadge, WorkflowStepper, getPurchaseWorkflow
+- Read purchase returns API endpoints (route.ts + [id]/route.ts) to understand data structure and actions
+- Read Prisma schema for PurchaseReturn and PurchaseReturnLine model structure
+- Read store.ts for useAppStore interface (editingDocId, setView, setModule, etc.)
+- Read erp-utils.ts for formatCurrency, formatDate utilities
+- Created src/components/purchases/purchase-return-form-page.tsx with the following structure:
+  - DocumentPageHeader using Undo2 icon with red styling (bg-red-50, text-red-600) — return/reverse operation identity
+  - WorkflowStepper showing purchase workflow: أمر الشراء → إذن الاستلام → فاتورة الشراء
+    - Linked document numbers shown via LinkedDocumentBadge (purchase order, purchase receipt, purchase invoice)
+  - Info Section (DocumentSection): Date, Supplier (select), Warehouse (select), linked document reference (read-only when pre-filled from localStorage)
+  - Lines Section (DocumentSection, noPadding):
+    - Table columns: كود الصنف, اسم الصنف, الكمية, السعر, الإجمالي, حذف
+    - Barcode & search area with red hover styling (hover:bg-red-50)
+    - Alternating row backgrounds (even rows bg-white, odd rows bg-slate-50/70)
+    - Original quantity reference from source document shown as small text above quantity input
+    - Each line has quantity and unitPrice inputs, totalAmount auto-calculated (qty * price)
+  - Totals Section (DocumentSection): Item count, total quantity, total amount (text-2xl, text-red-700)
+  - Notes Section (DocumentSection): Textarea for notes
+- Pre-fill logic from localStorage key `pendingPurchaseReturn`:
+  - Reads sourceType (purchaseOrder/purchaseInvoice/purchaseReceipt), sourceId, sourceNumber, supplierId, supplierName, warehouseId, lines
+  - Pre-fills supplier, warehouse, and lines from source document
+  - Sets linked document IDs based on sourceType (purchaseOrderId/purchaseInvoiceId/purchaseReceiptId)
+  - Tracks linked document numbers for workflow stepper badges
+  - Clears localStorage key after reading
+  - Shows linked document number as read-only in info section with source type label in Arabic
+- Workflow:
+  - DRAFT: Can edit, save, confirm
+  - CONFIRMED: Read-only, no actions
+  - CANCELLED: Read-only
+- Actions:
+  - "حفظ كمسودة" (Save Draft) — always when DRAFT, with red outline styling (border-red-200, text-red-700)
+  - "تأكيد المرتجع" (Confirm Return) — only when DRAFT, with red filled styling (bg-red-600)
+- Store integration:
+  - Uses editingDocId to determine new vs edit mode
+  - Navigates to 'purchase-returns' view on go back
+  - Clears editingDocId on back navigation via setEditingDocId(null)
+- Data fetching:
+  - Suppliers: /api/purchases/suppliers?activeOnly=true&companyId=${companyId}
+  - Warehouses: /api/inventory/warehouses?activeOnly=true&companyId=${companyId}
+  - Items: /api/inventory/items?activeOnly=true&companyId=${companyId}
+- Simpler line model (no per-line discount/tax — just quantity, unitPrice, totalAmount = qty * price)
+- Loading spinner uses red-600 to match document identity
+- Lint passes cleanly (0 errors, 0 warnings)
+
+Changes Summary:
+- Created: src/components/purchases/purchase-return-form-page.tsx (~510 lines)
+- Red color identity for purchase return document (bg-red-50, text-red-600) — reverse operation, consistent with sales return
+- Undo2 icon for document type identity
+- Full localStorage pre-fill from pendingPurchaseReturn key
+- Workflow stepper shows purchase workflow with linked document badges
+- LinkedDocumentBadge for purchase order, purchase receipt, purchase invoice references
+- RTL Arabic maintained throughout
+- Follows exact same code style as purchase-order-form-page.tsx
+
+---
+Task ID: 6a
+Agent: Returns List Agent
+Task: Create Purchase Returns List and Sales Returns List page components
+
+Work Log:
+- Read worklog.md to understand previous agent work (UI/UX refactoring, returns APIs by Tasks 2/3, return forms by Tasks 4/5)
+- Read purchase-orders-list.tsx as primary pattern reference for purchase returns list
+- Read sales-orders-list.tsx as primary pattern reference for sales returns list
+- Read purchase returns API (route.ts) to understand GET response structure: includes supplier, warehouse, purchaseOrder/purchaseInvoice/purchaseReceipt linked docs, lines with items, _count
+- Read sales returns API (route.ts) to understand GET response structure: includes customer, warehouse, salesOrder/salesInvoice/deliveryNote linked docs, lines with items, _count
+- Read erp-utils.ts to confirm getStatusColor/getStatusLabel (DRAFT=مسودة/yellow, CONFIRMED=مؤكدة/blue, CANCELLED=ملغية/red)
+- Read store.ts to confirm useAppStore interface (editingDocId, setView, setModule, setEditingDocId)
+
+Created: /src/components/purchases/purchase-returns-list.tsx (~300 lines)
+- Undo2 icon with red styling (bg-red-50, text-red-600) — return/reverse operation identity
+- Card header with "مرتجعات المشتريات" title and count subtitle
+- "إضافة مرتجع" button → navigate to 'purchase-return-form' view with setEditingDocId(null)
+- Filters: status (all/DRAFT/CONFIRMED/CANCELLED), date range (from/to)
+- Table columns: الرقم, التاريخ, المورد, المخزن, المستند المرتبط, الإجمالي, الحالة, إجراءات
+- Click number → navigate to 'purchase-return-form' view with editingDocId set
+- Linked document column shows number + type label (إذن استلام/فاتورة شراء/أمر شراء) with priority: purchaseReceipt > purchaseInvoice > purchaseOrder
+- Status badges using getStatusColor/getStatusLabel from erp-utils
+- Actions: View detail (Eye), Confirm (CheckCircle) and Cancel (XCircle) for DRAFT status
+- Detail dialog with return info, lines table, total, and notes
+- Confirm/Cancel dialog with appropriate Arabic messages mentioning stock movements
+- Fetch from /api/purchases/returns?companyId=${companyId} with filters
+- Loading skeleton state
+- Empty state with Undo2 icon and helpful message
+- Arabic RTL, emerald green identity for navigation/confirm actions
+
+Created: /src/components/sales/sales-returns-list.tsx (~300 lines)
+- Undo2 icon with red styling (bg-red-50, text-red-600) — return/reverse operation identity
+- Card header with "مرتجعات البيع" title and count subtitle
+- "إضافة مرتجع" button → navigate to 'sales-return-form' view with setEditingDocId(null)
+- Filters: status (all/DRAFT/CONFIRMED/CANCELLED), date range (from/to)
+- Table columns: الرقم, التاريخ, العميل, المخزن, المستند المرتبط, الإجمالي, الحالة, إجراءات
+- Click number → navigate to 'sales-return-form' view with editingDocId set
+- Linked document column shows number + type label (فاتورة بيع/إذن صرف/أمر بيع) with priority: salesInvoice > deliveryNote > salesOrder
+- Status badges using getStatusColor/getStatusLabel from erp-utils
+- Actions: View detail (Eye), Confirm (CheckCircle) and Cancel (XCircle) for DRAFT status
+- Detail dialog with return info, lines table, total, and notes
+- Confirm/Cancel dialog with appropriate Arabic messages mentioning stock movements
+- Fetch from /api/sales/returns?companyId=${companyId} with filters
+- Loading skeleton state
+- Empty state with Undo2 icon and helpful message
+- Arabic RTL, emerald green identity for navigation/confirm actions
+
+Both components use view strings 'purchase-returns', 'sales-returns', 'purchase-return-form', 'sales-return-form' for setView() navigation.
+
+Lint passes cleanly with no errors.
+
+---
+Task ID: 6b
+Agent: Return Shortcut Agent
+Task: Add "إنشاء مرتجع" (Create Return) shortcut buttons to existing document form pages
+
+Work Log:
+- Read worklog.md to understand previous agent work (UI/UX refactoring, purchase/sales returns API, return form pages)
+- Read all 6 target files to understand their structure and existing shortcutActions patterns
+- Read PurchaseReturnFormPage and SalesReturnFormPage to understand localStorage format (PendingPurchaseReturn, PendingSalesReturn interfaces)
+- Read page.tsx to understand view routing and confirm return form views needed registration
+- Read store.ts to understand view type definitions
+
+Modified 6 form pages:
+1. purchase-order-form-page.tsx:
+   - Added Undo2 import
+   - Added handleCreateReturn function (sourceType: 'purchaseOrder', localStorage key: pendingPurchaseReturn)
+   - Added "إنشاء مرتجع" shortcut alongside existing "تحويل لإذن استلام" when status === CONFIRMED
+   - Red styling: border-red-200 text-red-700 hover:bg-red-50
+
+2. purchase-invoice-form-page.tsx:
+   - Added Undo2 import
+   - Added handleCreateReturn function (sourceType: 'purchaseInvoice', localStorage key: pendingPurchaseReturn)
+   - Added shortcutActions prop (new — previously no shortcutActions on this page) with "إنشاء مرتجع" when CONFIRMED
+
+3. purchase-receipt-form-page.tsx:
+   - Added Undo2 import
+   - Added handleCreateReturn function (sourceType: 'purchaseReceipt', localStorage key: pendingPurchaseReturn, unitPrice: 0)
+   - Added "إنشاء مرتجع" shortcut alongside existing "إنشاء فاتورة شراء" when CONFIRMED
+
+4. sales-order-form-page.tsx:
+   - Added Undo2 import
+   - Added handleCreateReturn function (sourceType: 'salesOrder', localStorage key: pendingSalesReturn, warehouseId: '')
+   - Added "إنشاء مرتجع" shortcut alongside existing "تحويل لإذن صرف" when CONFIRMED
+
+5. sales-invoice-form-page.tsx:
+   - Added Undo2 import
+   - Added handleCreateReturn function (sourceType: 'salesInvoice', localStorage key: pendingSalesReturn, warehouseId: '')
+   - Added shortcutActions prop (new) with "إنشاء مرتجع" when CONFIRMED
+
+6. delivery-note-form-page.tsx:
+   - Added Undo2 import
+   - Added handleCreateReturn function (sourceType: 'deliveryNote', localStorage key: pendingSalesReturn, unitPrice: 0)
+   - Added "إنشاء مرتجع" shortcut alongside existing "إنشاء فاتورة بيع" when CONFIRMED
+
+Additional changes for navigation support:
+- Updated page.tsx: Added imports for PurchaseReturnFormPage and SalesReturnFormPage, added switch cases for 'purchase-return-form' and 'sales-return-form' views, added view title mappings
+- Updated store.ts: Added 'purchase-return-form' to PurchasesView type, added 'sales-return-form' to SalesView type
+
+All return shortcut buttons:
+- Use Undo2 icon from lucide-react
+- Only appear when document status === 'CONFIRMED'
+- Store return data in localStorage matching the PendingPurchaseReturn/PendingSalesReturn interfaces
+- Navigate to the appropriate return form page via setView
+- Use red styling (border-red-200 text-red-700 hover:bg-red-50) consistent with return/reverse operation identity
+
+Lint passes cleanly with no errors. Dev server running on port 3000 (HTTP 200).
+
+---
+Task ID: 12
+Agent: Main Orchestrator
+Task: Implement Returns System (نظام المرتجعات) - Full/Partial returns for all document types
+
+Work Log:
+- Added PurchaseReturn, PurchaseReturnLine, SalesReturn, SalesReturnLine models to Prisma schema
+- Added reverse relations to all existing models (Company, Supplier, Customer, Warehouse, Item, PurchaseOrder, PurchaseInvoice, PurchaseReceipt, SalesOrder, SalesInvoice, DeliveryNote)
+- Ran db:push and prisma generate successfully
+- Created Purchase Returns API: GET/POST /api/purchases/returns, GET/PUT /api/purchases/returns/[id]
+  - GET: List with filters (status, supplierId, date range), includes supplier/warehouse/linked docs/lines
+  - POST: Create with auto-numbering PRET-{YYYY}-{0001}, validates supplier/warehouse/linked docs
+  - PUT: confirm (DRAFT→CONFIRMED, creates OUT stock movements, reduces ItemBalance), cancel, update
+- Created Sales Returns API: GET/POST /api/sales/returns, GET/PUT /api/sales/returns/[id]
+  - GET: List with filters (status, customerId, date range), includes customer/warehouse/linked docs/lines
+  - POST: Create with auto-numbering SRET-{YYYY}-{0001}, validates customer/warehouse/linked docs
+  - PUT: confirm (DRAFT→CONFIRMED, creates IN stock movements, increases ItemBalance), cancel, update
+- Created PurchaseReturnFormPage component with red identity (bg-red-50, text-red-600)
+  - Pre-fills from localStorage (pendingPurchaseReturn) when creating from existing document
+  - Shows linked document reference, original quantities from source
+  - Workflow: DRAFT (editable) → CONFIRMED (read-only)
+- Created SalesReturnFormPage component with same red identity
+  - Pre-fills from localStorage (pendingSalesReturn) when creating from existing document
+  - Same workflow pattern as purchase returns
+- Created PurchaseReturnsList and SalesReturnsList list pages with red identity
+  - Table with status badges, linked document column, detail dialog
+  - Confirm/Cancel actions for DRAFT returns
+- Added "إنشاء مرتجع" (Create Return) shortcut to 6 document form pages:
+  - Purchase Order (sourceType: purchaseOrder) - only when CONFIRMED
+  - Purchase Invoice (sourceType: purchaseInvoice) - only when CONFIRMED
+  - Purchase Receipt (sourceType: purchaseReceipt) - only when CONFIRMED
+  - Sales Order (sourceType: salesOrder) - only when CONFIRMED
+  - Sales Invoice (sourceType: salesInvoice) - only when CONFIRMED
+  - Delivery Note (sourceType: deliveryNote) - only when CONFIRMED
+- Updated store.ts: Added purchase-returns, sales-returns, purchase-return-form, sales-return-form view types
+- Updated page.tsx: Added Undo2 import, navigation items for مرتجعات المشتريات and مرتجعات المبيعات, view titles, rendering cases
+- Updated dashboards: Added returns shortcuts to PurchasesDashboard and SalesDashboard
+- Fixed: Prisma client regeneration needed after schema change (server restart)
+- Fixed: Changed Record<string, unknown> to any for Prisma where clauses
+- Lint passes with 0 errors
+
+Stage Summary:
+- Complete returns system implemented with full/partial return support
+- Returns can be created from any confirmed purchase/sales document via shortcut button
+- Returns track linked source documents and show original quantities
+- Confirming a return automatically updates stock (OUT for purchase returns, IN for sales returns)
+- Red color identity for returns (reverse operations) across all return components
+- Navigation: مرتجعات المشتريات under المشتريات, مرتجعات المبيعات under المبيعات

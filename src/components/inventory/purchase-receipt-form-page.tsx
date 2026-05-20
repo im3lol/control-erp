@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
   Save, Send, Loader2, PackageCheck, Plus, XCircle,
-  ScanLine, Search, FileText, Package, ClipboardList,
+  ScanLine, Search, FileText, Package, ClipboardList, Undo2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -487,6 +487,30 @@ export default function PurchaseReceiptFormPage() {
     }
   }
 
+  // ── Create Purchase Return shortcut ──
+
+  const handleCreateReturn = () => {
+    const returnData = {
+      sourceType: 'purchaseReceipt' as const,
+      sourceId: receiptId,
+      sourceNumber: receiptNumber,
+      supplierId: receiptSupplierId,
+      supplierName: suppliers.find(s => s.id === receiptSupplierId)?.nameAr || '',
+      warehouseId: receiptWarehouseId,
+      lines: receiptLines.filter(l => l.itemId && parseFloat(l.quantity) > 0).map(l => ({
+        itemId: l.itemId,
+        itemCode: items.find(i => i.id === l.itemId)?.code || '',
+        itemName: items.find(i => i.id === l.itemId)?.nameAr || '',
+        quantity: parseFloat(l.quantity),
+        unitPrice: 0,
+      })),
+    }
+    localStorage.setItem('pendingPurchaseReturn', JSON.stringify(returnData))
+    useAppStore.getState().setEditingDocId('new')
+    useAppStore.getState().setModule('purchases')
+    useAppStore.getState().setView('purchase-return-form')
+  }
+
   // ── Create Purchase Invoice shortcut ──
 
   const handleCreatePurchaseInvoice = () => {
@@ -558,6 +582,12 @@ export default function PurchaseReceiptFormPage() {
                   icon: FileText,
                   onClick: handleCreatePurchaseInvoice,
                   className: 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600',
+                },
+                {
+                  label: 'إنشاء مرتجع',
+                  icon: Undo2,
+                  onClick: handleCreateReturn,
+                  className: 'border-red-200 text-red-700 hover:bg-red-50',
                 },
               ]
             : undefined

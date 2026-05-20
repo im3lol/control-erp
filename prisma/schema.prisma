@@ -83,6 +83,8 @@ model Company {
   pickLists         PickList[]
   purchaseOrders    PurchaseOrder[]
   salesOrders       SalesOrder[]
+  purchaseReturns   PurchaseReturn[]
+  salesReturns      SalesReturn[]
 }
 
 model CompanyUser {
@@ -168,6 +170,8 @@ model Warehouse {
   purchaseReceipts PurchaseReceipt[]
   pickLists        PickList[]
   purchaseOrders   PurchaseOrder[]
+  purchaseReturns  PurchaseReturn[]
+  salesReturns     SalesReturn[]
 
   @@unique([companyId, code])
 }
@@ -225,6 +229,8 @@ model Item {
   pickListLines        PickListLine[]
   purchaseOrderLines   PurchaseOrderLine[]
   salesOrderLines      SalesOrderLine[]
+  purchaseReturnLines  PurchaseReturnLine[]
+  salesReturnLines     SalesReturnLine[]
 
   @@unique([companyId, code])
 }
@@ -379,6 +385,7 @@ model DeliveryNote {
   customer     Customer?          @relation(fields: [customerId], references: [id])
   warehouse    Warehouse          @relation(fields: [warehouseId], references: [id])
   lines        DeliveryNoteLine[]
+  salesReturns SalesReturn[]
 
   @@unique([companyId, number])
 }
@@ -415,6 +422,7 @@ model PurchaseReceipt {
   supplier       Supplier?            @relation(fields: [supplierId], references: [id])
   warehouse      Warehouse            @relation(fields: [warehouseId], references: [id])
   lines          PurchaseReceiptLine[]
+  purchaseReturns PurchaseReturn[]
 
   @@unique([companyId, number])
 }
@@ -547,6 +555,7 @@ model Customer {
   receiptVouchers ReceiptVoucher[]
   deliveryNotes   DeliveryNote[]
   salesOrders     SalesOrder[]
+  salesReturns    SalesReturn[]
 
   @@unique([companyId, code])
 }
@@ -576,6 +585,7 @@ model SalesInvoice {
   lines      SalesInvoiceLine[]
   receiptLines ReceiptLine[]
   deliveryNotes DeliveryNote[]
+  salesReturns SalesReturn[]
 
   @@unique([companyId, number])
 }
@@ -649,6 +659,7 @@ model Supplier {
   paymentVouchers  PaymentVoucher[]
   purchaseReceipts PurchaseReceipt[]
   purchaseOrders   PurchaseOrder[]
+  purchaseReturns  PurchaseReturn[]
 
   @@unique([companyId, code])
 }
@@ -680,6 +691,7 @@ model PurchaseInvoice {
   lines      PurchaseInvoiceLine[]
   paymentLines PaymentLine[]
   purchaseReceipts PurchaseReceipt[]
+  purchaseReturns PurchaseReturn[]
 
   @@unique([companyId, number])
 }
@@ -753,6 +765,7 @@ model PurchaseOrder {
   warehouse  Warehouse           @relation(fields: [warehouseId], references: [id])
   lines      PurchaseOrderLine[]
   purchaseReceipts PurchaseReceipt[]
+  purchaseReturns  PurchaseReturn[]
 
   @@unique([companyId, number])
 }
@@ -797,6 +810,7 @@ model SalesOrder {
   customer   Customer          @relation(fields: [customerId], references: [id])
   lines      SalesOrderLine[]
   deliveryNotes DeliveryNote[]
+  salesReturns  SalesReturn[]
 
   @@unique([companyId, number])
 }
@@ -903,4 +917,88 @@ model Withdrawal {
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   investor Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// RETURNS MODULE
+// ============================================
+
+model PurchaseReturn {
+  id               String   @id @default(cuid())
+  companyId        String
+  number           String   // PRET-0001
+  date             DateTime
+  status           String   @default("DRAFT") // DRAFT, CONFIRMED, CANCELLED
+  supplierId       String
+  warehouseId      String
+  purchaseOrderId  String?
+  purchaseInvoiceId String?
+  purchaseReceiptId String?
+  totalAmount      Float    @default(0)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier        Supplier            @relation(fields: [supplierId], references: [id])
+  warehouse       Warehouse           @relation(fields: [warehouseId], references: [id])
+  purchaseOrder   PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  purchaseInvoice PurchaseInvoice?    @relation(fields: [purchaseInvoiceId], references: [id])
+  purchaseReceipt PurchaseReceipt?    @relation(fields: [purchaseReceiptId], references: [id])
+  lines           PurchaseReturnLine[]
+
+  @@unique([companyId, number])
+}
+
+model PurchaseReturnLine {
+  id              String   @id @default(cuid())
+  purchaseReturnId String
+  itemId          String
+  quantity        Float
+  unitPrice       Float    @default(0)
+  totalAmount     Float    @default(0)
+  notes           String?
+
+  purchaseReturn  PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  item            Item           @relation(fields: [itemId], references: [id])
+}
+
+model SalesReturn {
+  id              String   @id @default(cuid())
+  companyId       String
+  number          String   // SRET-0001
+  date            DateTime
+  status          String   @default("DRAFT") // DRAFT, CONFIRMED, CANCELLED
+  customerId      String
+  warehouseId     String
+  salesOrderId    String?
+  salesInvoiceId  String?
+  deliveryNoteId  String?
+  totalAmount     Float    @default(0)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer       Customer         @relation(fields: [customerId], references: [id])
+  warehouse      Warehouse        @relation(fields: [warehouseId], references: [id])
+  salesOrder     SalesOrder?      @relation(fields: [salesOrderId], references: [id])
+  salesInvoice   SalesInvoice?    @relation(fields: [salesInvoiceId], references: [id])
+  deliveryNote   DeliveryNote?    @relation(fields: [deliveryNoteId], references: [id])
+  lines          SalesReturnLine[]
+
+  @@unique([companyId, number])
+}
+
+model SalesReturnLine {
+  id            String   @id @default(cuid())
+  salesReturnId String
+  itemId        String
+  quantity      Float
+  unitPrice     Float    @default(0)
+  totalAmount   Float    @default(0)
+  notes         String?
+
+  salesReturn   SalesReturn @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
+  item          Item        @relation(fields: [itemId], references: [id])
 }

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
   Save, Send, Loader2, FileText, Plus, XCircle,
-  ScanLine, Search, Package, Calculator,
+  ScanLine, Search, Package, Calculator, Undo2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -460,6 +460,30 @@ export default function SalesInvoiceFormPage() {
   const totals = calcInvoiceTotals()
   const isEditable = currentStatus === 'DRAFT' || currentStatus === 'NEW'
 
+  // ── Create Sales Return shortcut ──
+
+  const handleCreateReturn = () => {
+    const returnData = {
+      sourceType: 'salesInvoice' as const,
+      sourceId: invoiceId,
+      sourceNumber: invoiceNumber,
+      customerId: invoiceCustomerId,
+      customerName: customers.find(c => c.id === invoiceCustomerId)?.nameAr || '',
+      warehouseId: '',
+      lines: invoiceLines.filter(l => l.itemId && parseFloat(l.quantity) > 0).map(l => ({
+        itemId: l.itemId,
+        itemCode: items.find(i => i.id === l.itemId)?.code || '',
+        itemName: items.find(i => i.id === l.itemId)?.nameAr || '',
+        quantity: parseFloat(l.quantity),
+        unitPrice: parseFloat(l.unitPrice) || 0,
+      })),
+    }
+    localStorage.setItem('pendingSalesReturn', JSON.stringify(returnData))
+    useAppStore.getState().setEditingDocId('new')
+    useAppStore.getState().setModule('sales')
+    useAppStore.getState().setView('sales-return-form')
+  }
+
   // ── Workflow stepper ──
 
   const siStepStatus = currentStatus === 'CONFIRMED' || currentStatus === 'PARTIAL_PAID' || currentStatus === 'PAID' || currentStatus === 'CLOSED'
@@ -503,6 +527,18 @@ export default function SalesInvoiceFormPage() {
         status={currentStatus}
         subtitle={invoiceId ? 'تعديل أو تأكيد فاتورة البيع' : 'إنشاء فاتورة بيع جديدة للعميل'}
         onGoBack={handleGoBack}
+        shortcutActions={
+          currentStatus === 'CONFIRMED'
+            ? [
+                {
+                  label: 'إنشاء مرتجع',
+                  icon: Undo2,
+                  onClick: handleCreateReturn,
+                  className: 'border-red-200 text-red-700 hover:bg-red-50',
+                },
+              ]
+            : undefined
+        }
         primaryActions={
           isEditable
             ? [
