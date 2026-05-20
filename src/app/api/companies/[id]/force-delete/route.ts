@@ -28,84 +28,109 @@ export async function DELETE(
     }
 
     // Delete all related data in order (respecting foreign key constraints)
-    // Pick lists
-    await db.pickListItem.deleteMany({ where: { pickList: { companyId: id } } })
+
+    // ── Sales Returns ──
+    await db.salesReturnLine.deleteMany({ where: { salesReturn: { companyId: id } } })
+    await db.salesReturn.deleteMany({ where: { companyId: id } })
+
+    // ── Purchase Returns ──
+    await db.purchaseReturnLine.deleteMany({ where: { purchaseReturn: { companyId: id } } })
+    await db.purchaseReturn.deleteMany({ where: { companyId: id } })
+
+    // ── Pick Lists ──
+    await db.pickListLine.deleteMany({ where: { pickList: { companyId: id } } })
     await db.pickList.deleteMany({ where: { companyId: id } })
 
-    // Purchase receipts
-    await db.purchaseReceiptItem.deleteMany({ where: { purchaseReceipt: { companyId: id } } })
+    // ── Purchase Receipts ──
+    await db.purchaseReceiptLine.deleteMany({ where: { purchaseReceipt: { companyId: id } } })
     await db.purchaseReceipt.deleteMany({ where: { companyId: id } })
 
-    // Material requests
-    await db.materialRequestItem.deleteMany({ where: { materialRequest: { companyId: id } } })
+    // ── Material Requests ──
+    await db.materialRequestLine.deleteMany({ where: { materialRequest: { companyId: id } } })
     await db.materialRequest.deleteMany({ where: { companyId: id } })
 
-    // Delivery notes
-    await db.deliveryNoteItem.deleteMany({ where: { deliveryNote: { companyId: id } } })
+    // ── Delivery Notes ──
+    await db.deliveryNoteLine.deleteMany({ where: { deliveryNote: { companyId: id } } })
     await db.deliveryNote.deleteMany({ where: { companyId: id } })
 
-    // Purchase orders
-    await db.purchaseOrderItem.deleteMany({ where: { purchaseOrder: { companyId: id } } })
+    // ── Purchase Orders ──
+    await db.purchaseOrderLine.deleteMany({ where: { purchaseOrder: { companyId: id } } })
     await db.purchaseOrder.deleteMany({ where: { companyId: id } })
 
-    // Sales orders
-    await db.salesOrderItem.deleteMany({ where: { salesOrder: { companyId: id } } })
+    // ── Sales Orders ──
+    await db.salesOrderLine.deleteMany({ where: { salesOrder: { companyId: id } } })
     await db.salesOrder.deleteMany({ where: { companyId: id } })
 
-    // Sales invoices
-    await db.salesInvoiceItem.deleteMany({ where: { salesInvoice: { companyId: id } } })
+    // ── Sales Invoices (receipt lines first, then sales invoice lines) ──
+    await db.receiptLine.deleteMany({ where: { salesInvoice: { companyId: id } } })
+    await db.salesInvoiceLine.deleteMany({ where: { salesInvoice: { companyId: id } } })
     await db.salesInvoice.deleteMany({ where: { companyId: id } })
 
-    // Purchase invoices
-    await db.purchaseInvoiceItem.deleteMany({ where: { purchaseInvoice: { companyId: id } } })
+    // ── Purchase Invoices (payment lines first, then purchase invoice lines) ──
+    await db.paymentLine.deleteMany({ where: { purchaseInvoice: { companyId: id } } })
+    await db.purchaseInvoiceLine.deleteMany({ where: { purchaseInvoice: { companyId: id } } })
     await db.purchaseInvoice.deleteMany({ where: { companyId: id } })
 
-    // Receipt vouchers
+    // ── Receipt Vouchers ──
+    await db.receiptLine.deleteMany({ where: { receiptVoucher: { companyId: id } } })
     await db.receiptVoucher.deleteMany({ where: { companyId: id } })
 
-    // Payment vouchers
+    // ── Payment Vouchers ──
+    await db.paymentLine.deleteMany({ where: { paymentVoucher: { companyId: id } } })
     await db.paymentVoucher.deleteMany({ where: { companyId: id } })
 
-    // Journal entries
+    // ── Journal Entries ──
     await db.journalEntryLine.deleteMany({ where: { journalEntry: { companyId: id } } })
     await db.journalEntry.deleteMany({ where: { companyId: id } })
 
-    // Stock transfers
-    await db.stockTransferItem.deleteMany({ where: { stockTransfer: { companyId: id } } })
+    // ── Stock Transfers ──
+    await db.stockTransferLine.deleteMany({ where: { stockTransfer: { companyId: id } } })
     await db.stockTransfer.deleteMany({ where: { companyId: id } })
 
-    // Items
+    // ── Stock Movements ──
+    await db.stockMovement.deleteMany({ where: { companyId: id } })
+
+    // ── FIFO Layers ──
+    await db.fifoLayer.deleteMany({ where: { item: { companyId: id } } })
+
+    // ── Item Balances ──
+    await db.itemBalance.deleteMany({ where: { item: { companyId: id } } })
+
+    // ── Item Codes ──
+    await db.itemCode.deleteMany({ where: { item: { companyId: id } } })
+
+    // ── Items ──
     await db.item.deleteMany({ where: { companyId: id } })
 
-    // Customers
+    // ── Customers ──
     await db.customer.deleteMany({ where: { companyId: id } })
 
-    // Suppliers
+    // ── Suppliers ──
     await db.supplier.deleteMany({ where: { companyId: id } })
 
-    // Investors
-    await db.withdrawal.deleteMany({ where: { investment: { companyId: id } } })
-    await db.profitDistributionItem.deleteMany({ where: { profitDistribution: { companyId: id } } })
+    // ── Investors ──
+    await db.investorShare.deleteMany({ where: { distribution: { companyId: id } } })
     await db.profitDistribution.deleteMany({ where: { companyId: id } })
+    await db.withdrawal.deleteMany({ where: { investment: { companyId: id } } })
     await db.investment.deleteMany({ where: { companyId: id } })
     await db.investor.deleteMany({ where: { companyId: id } })
 
-    // Accounts
+    // ── Accounts ──
     await db.account.deleteMany({ where: { companyId: id } })
 
-    // Warehouses
+    // ── Warehouses ──
     await db.warehouse.deleteMany({ where: { companyId: id } })
 
-    // Currencies
+    // ── Currencies ──
     await db.currency.deleteMany({ where: { companyId: id } })
 
-    // UOMs
+    // ── Units of Measure ──
     await db.unitOfMeasure.deleteMany({ where: { companyId: id } })
 
-    // Categories
+    // ── Item Categories ──
     await db.itemCategory.deleteMany({ where: { companyId: id } })
 
-    // Company users
+    // ── Company Users ──
     await db.companyUser.deleteMany({ where: { companyId: id } })
 
     // Finally delete the company itself

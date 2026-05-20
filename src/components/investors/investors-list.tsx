@@ -15,6 +15,8 @@ import {
   Banknote,
   HandCoins,
   ArrowDownFromLine,
+  Trash2,
+  AlertTriangle,
   X,
   Star,
 } from 'lucide-react'
@@ -114,6 +116,11 @@ export default function InvestorsList() {
   const [withdrawalType, setWithdrawalType] = useState('profit')
   const [withdrawalNotes, setWithdrawalNotes] = useState('')
   const [withdrawalSubmitting, setWithdrawalSubmitting] = useState(false)
+
+  // Delete dialog
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deletingInvestor, setDeletingInvestor] = useState<InvestorSummary | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const fetchInvestors = useCallback(async () => {
     try {
@@ -250,6 +257,29 @@ export default function InvestorsList() {
       toast.error('حدث خطأ')
     } finally {
       setInvestmentSubmitting(false)
+    }
+  }
+
+  const handleDeleteInvestor = async () => {
+    if (!deletingInvestor) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/investors/${deletingInvestor.id}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        toast.success('تم حذف المستثمر بنجاح')
+        setDeleteOpen(false)
+        setDeletingInvestor(null)
+        fetchInvestors()
+      } else {
+        const err = await res.json()
+        toast.error(err.error || 'فشل في حذف المستثمر')
+      }
+    } catch {
+      toast.error('حدث خطأ أثناء حذف المستثمر')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -562,6 +592,18 @@ export default function InvestorsList() {
                             >
                               <ArrowDownFromLine className="h-4 w-4" />
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setDeletingInvestor(inv)
+                                setDeleteOpen(true)
+                              }}
+                              className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                              title="حذف"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -799,6 +841,67 @@ export default function InvestorsList() {
             >
               {withdrawalSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
               تسجيل السحب
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <AlertTriangle className="h-5 w-5" />
+              حذف المستثمر
+            </DialogTitle>
+            <DialogDescription>
+              هل أنت متأكد من حذف &quot;{deletingInvestor?.fullName}&quot;؟
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-red-800">
+                  سيتم حذف جميع بيانات المستثمر نهائياً بما فيها الاستثمارات والسحوبات والتوزيعات.
+                </p>
+                <p className="text-xs text-red-600 mt-1">
+                  لا يمكن التراجع عن هذا الإجراء.
+                </p>
+              </div>
+            </div>
+          </div>
+          {deletingInvestor && deletingInvestor.totalInvestment > 0 && (
+            <div className="bg-slate-50 rounded-lg p-3">
+              <p className="text-xs font-semibold text-slate-600 mb-2">بيانات المستثمر:</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="flex items-center justify-between text-xs bg-white rounded px-2 py-1.5">
+                  <span className="text-slate-600">إجمالي الاستثمار</span>
+                  <span className="font-mono font-bold text-emerald-600" dir="ltr">
+                    {formatCurrency(deletingInvestor.totalInvestment)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs bg-white rounded px-2 py-1.5">
+                  <span className="text-slate-600">الأرباح المستحقة</span>
+                  <span className="font-mono font-bold text-amber-600" dir="ltr">
+                    {formatCurrency(deletingInvestor.pendingProfit)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              تراجع
+            </Button>
+            <Button
+              onClick={handleDeleteInvestor}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white gap-2"
+            >
+              {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+              <Trash2 className="h-4 w-4" />
+              حذف نهائي
             </Button>
           </DialogFooter>
         </DialogContent>

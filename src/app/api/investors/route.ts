@@ -209,3 +209,72 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+// PUT /api/investors - Update investor
+export async function PUT(request: NextRequest) {
+  try {
+    const user = await requirePermission('investors.edit', request)
+    const body = await request.json()
+    const { id, fullName, phone, email, nationalId, status } = body
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'معرف المستثمر مطلوب' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.investor.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'المستثمر غير موجود' },
+        { status: 404 }
+      )
+    }
+
+    const updated = await db.investor.update({
+      where: { id },
+      data: {
+        ...(fullName !== undefined && { fullName: fullName.trim() }),
+        ...(phone !== undefined && { phone: phone || null }),
+        ...(email !== undefined && { email: email || null }),
+        ...(nationalId !== undefined && { nationalId: nationalId || null }),
+        ...(status !== undefined && { status }),
+      },
+    })
+
+    // Also update the related capital account name if fullName changed
+    if (fullName && fullName.trim() !== existing.fullName) {
+      const seqPart = existing.code.split('-').pop()
+      // Update capital account name
+      const capitalAccountCode = `3101-${seqPart}`
+      await db.account.updateMany({
+        where: { code: capitalAccountCode, companyId: existing.companyId },
+        data: {
+          nameAr: `رأس مال - ${fullName.trim()}`,
+          nameEn: `Capital - ${fullName.trim()}`,
+        },
+      })
+      // Update profit payable account name
+      const profitAccountCode = `2104-${seqPart}`
+      await db.account.updateMany({
+        where: { code: profitAccountCode, companyId: existing.companyId },
+        data: {
+          nameAr: `أرباح مستحقة - ${fullName.trim()}`,
+          nameEn: `Profit Payable - ${fullName.trim()}`,
+        },
+      })
+    }
+
+    return NextResponse.json(updated)
+  } catch (error) {
+    if (error instanceof Error && (error.message.includes('غير مصرح') || error.message.includes('صلاحية'))) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    console.error('Update investor error:', error)
+    return NextResponse.json(
+      { error: 'فشل في تحديث بيانات المستثمر' },
+      { status: 500 }
+    )
+  }
+}

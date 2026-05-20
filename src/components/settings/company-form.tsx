@@ -39,6 +39,7 @@ export default function CompanyForm() {
 
   useEffect(() => {
     if (!companyId) return
+    setLoading(true)
     const fetchCompany = async () => {
       try {
         const res = await fetch(`/api/settings/company?companyId=${companyId}`)
@@ -63,7 +64,7 @@ export default function CompanyForm() {
       }
     }
     fetchCompany()
-  }, [])
+  }, [companyId])
 
   const handleChange = (field: keyof CompanyData, value: string) => {
     setData((prev) => ({ ...prev, [field]: value }))
