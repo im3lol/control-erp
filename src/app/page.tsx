@@ -82,6 +82,7 @@ import UOMList from '@/components/settings/uom-list'
 import UsersList from '@/components/settings/users-list'
 import ChartOfAccounts from '@/components/accounting/chart-of-accounts'
 import JournalEntriesList from '@/components/accounting/journal-entries-list'
+import AccountingDashboard from '@/components/accounting/accounting-dashboard'
 import WarehousesList from '@/components/inventory/warehouses-list'
 import CategoriesList from '@/components/inventory/categories-list'
 import ItemsList from '@/components/inventory/items-list'
@@ -948,13 +949,14 @@ function AppContent() {
       }
     }
     if (currentModule === 'accounting') {
+      if (!currentView) return <AccountingDashboard />
       switch (currentView) {
         case 'journal-entries':
           return <JournalEntriesList />
         case 'chart-of-accounts':
           return <ChartOfAccounts />
         default:
-          return <ModulePlaceholder title={currentTitle} />
+          return <AccountingDashboard />
       }
     }
     if (currentModule === 'sales') {
