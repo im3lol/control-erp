@@ -110,7 +110,6 @@ import CustomersList from '@/components/sales/customers-list'
 import CustomerFormPage from '@/components/sales/customer-form-page'
 import SalesInvoicesList from '@/components/sales/sales-invoices-list'
 import SalesInvoiceFormPage from '@/components/sales/sales-invoice-form-page'
-import ReceiptVouchersList from '@/components/sales/receipt-vouchers-list'
 import SalesOrdersList from '@/components/sales/sales-orders-list'
 import SalesOrderFormPage from '@/components/sales/sales-order-form-page'
 import TrialBalanceReport from '@/components/reports/trial-balance'
@@ -225,7 +224,6 @@ const navigation: NavItem[] = [
       { id: 'customers', label: 'العملاء', icon: Users },
       { id: 'sales-orders', label: 'أوامر البيع', icon: ClipboardCheck },
       { id: 'sales-invoices', label: 'فواتير البيع', icon: FileText },
-      { id: 'receipt-vouchers', label: 'سندات القبض', icon: Receipt },
     ],
   },
   {
@@ -304,7 +302,6 @@ const viewTitles: Record<string, string> = {
   customers: 'العملاء',
   'sales-orders': 'أوامر البيع',
   'sales-invoices': 'فواتير البيع',
-  'receipt-vouchers': 'سندات القبض',
   'customer-form': 'إضافة عميل',
   'sales-order-form': 'أمر بيع جديد',
   'sales-invoice-form': 'فاتورة بيع جديدة',
@@ -970,8 +967,6 @@ function AppContent() {
           return <SalesInvoicesList />
         case 'sales-invoice-form':
           return <SalesInvoiceFormPage />
-        case 'receipt-vouchers':
-          return <ReceiptVouchersList />
         default:
           return <ModulePlaceholder title={currentTitle} />
       }
