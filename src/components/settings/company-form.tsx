@@ -32,6 +32,7 @@ const initialData: CompanyData = {
 
 export default function CompanyForm() {
   const companyId = useAppStore(state => state.currentCompanyId)
+  const updateCompany = useAppStore(state => state.updateCompany)
   const [data, setData] = useState<CompanyData>(initialData)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -81,6 +82,9 @@ export default function CompanyForm() {
         body: JSON.stringify({ ...data, companyId }),
       })
       if (res.ok) {
+        const updated = await res.json()
+        // Update store so header/switcher reflect the new name immediately
+        updateCompany(companyId!, { nameAr: updated.nameAr, nameEn: updated.nameEn, vatRate: updated.vatRate })
         toast.success('تم حفظ بيانات الشركة بنجاح')
       } else {
         const err = await res.json()

@@ -972,3 +972,55 @@ Stage Summary:
 - Barcode scanning and name search added to all order/receipt/invoice form pages
 - Document linking shortcuts added: PO→PR, SO→DN, PR→PI, PI→PR
 - Save (مسودة) and Submit (مؤكد) workflow implemented in all form pages
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: Fix company name not updating in header + Create companies management page + Delete protection with name confirmation
+
+Work Log:
+- Updated `src/lib/store.ts`: Added `updateCompany` and `removeCompany` actions to AppState
+  - `updateCompany(id, data)`: Updates a company in the companies array and persists to localStorage
+  - `removeCompany(id)`: Removes a company, auto-switches to another if deleted current company
+  - Added 'companies' and removed 'receipt-vouchers' from view type definitions
+- Updated `src/components/settings/company-form.tsx`:
+  - Added `updateCompany` from store
+  - After successful save, calls `updateCompany(companyId, { nameAr, nameEn, vatRate })` to sync store with API response
+  - This ensures the CompanySwitcher and header update immediately when company name changes
+- Created `src/components/settings/companies-list.tsx`:
+  - Full-page company management with table listing all companies
+  - Shows company name (Ar/En), status, data counts (items, customers, suppliers), creation date
+  - Current company highlighted with emerald background + "الحالية" badge
+  - Actions per company: Switch to (✓), View details (👁), Edit (✏️), Delete (🗑️)
+  - Edit dialog: Edit nameAr, nameEn, address, phone, email, taxNumber, vatRate
+  - Detail dialog: Full company info, data summary grid, actions (switch/edit)
+  - Delete dialog with two scenarios:
+    - No related data: Simple confirmation → deletes immediately
+    - Has related data: Shows warning box + detailed counts of all related records, requires typing exact company name to confirm
+  - Delete button stays disabled until name matches exactly
+- Updated `src/app/api/companies/route.ts`:
+  - GET: Added more select fields (address, phone, email, fiscalYearStart) and `_count` with items, customers, suppliers, salesInvoices, purchaseInvoices, warehouses, journalEntries
+- Updated `src/app/api/companies/[id]/route.ts`:
+  - Added DELETE endpoint that checks for related data first
+  - Returns 409 with counts if related data exists (UI then shows warning)
+  - Returns 200 and deletes if no related data
+- Created `src/app/api/companies/[id]/force-delete/route.ts`:
+  - DELETE endpoint that force-deletes a company and ALL its related data
+  - Requires `confirmedName` in request body that must match the company's Arabic name
+  - Deletes all related records in proper order (respecting foreign keys)
+  - Handles: pickLists, purchaseReceipts, materialRequests, deliveryNotes, purchaseOrders, salesOrders, salesInvoices, purchaseInvoices, receiptVouchers, paymentVouchers, journalEntries, stockTransfers, items, customers, suppliers, investors, accounts, warehouses, currencies, UOMs, categories, companyUsers
+- Updated `src/app/page.tsx`:
+  - Added "الشركات" (companies) as first item in Settings module children
+  - Added CompaniesList import
+  - Added 'companies' view title "إدارة الشركات"
+  - Added render case for 'companies' view
+- Removed سندات القبض (receipt-vouchers) from Sales sidebar
+  - Removed from navigation children, view titles, render case, and import
+  - Updated store SalesView type to remove receipt-vouchers
+
+Stage Summary:
+- Company name now updates immediately in header/switcher when saved in settings
+- New "إدارة الشركات" page under Settings shows all companies with CRUD operations
+- Delete protection: warns about related data with detailed counts, requires typing company name to confirm
+- سندات القبض removed from المبيعات
+- Lint passes cleanly

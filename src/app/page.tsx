@@ -76,6 +76,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import CompanySwitcher from '@/components/companies/company-switcher'
 import SetupWizard from '@/components/companies/setup-wizard'
 import CompanyForm from '@/components/settings/company-form'
+import CompaniesList from '@/components/settings/companies-list'
 import CurrenciesList from '@/components/settings/currencies-list'
 import UOMList from '@/components/settings/uom-list'
 import UsersList from '@/components/settings/users-list'
@@ -254,6 +255,7 @@ const navigation: NavItem[] = [
     label: 'الإعدادات',
     icon: Settings,
     children: [
+      { id: 'companies', label: 'الشركات', icon: Building2 },
       { id: 'company', label: 'بيانات الشركة', icon: Building2 },
       { id: 'currencies', label: 'العملات', icon: DollarSign },
       { id: 'uom', label: 'وحدات القياس', icon: Ruler },
@@ -277,6 +279,7 @@ const moduleTitles: Record<string, string> = {
 }
 
 const viewTitles: Record<string, string> = {
+  companies: 'إدارة الشركات',
   company: 'بيانات الشركة',
   currencies: 'العملات',
   uom: 'وحدات القياس',
@@ -889,6 +892,8 @@ function AppContent() {
     }
     if (currentModule === 'settings') {
       switch (currentView) {
+        case 'companies':
+          return <CompaniesList />
         case 'company':
           return <CompanyForm />
         case 'currencies':

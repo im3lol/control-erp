@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 
 export type Module = 'dashboard' | 'settings' | 'inventory' | 'accounting' | 'sales' | 'purchases' | 'reports' | 'investors'
-type SettingsView = 'company' | 'currencies' | 'uom' | 'users' | 'chart-of-accounts'
+type SettingsView = 'companies' | 'company' | 'currencies' | 'uom' | 'users' | 'chart-of-accounts'
 type InventoryView = 'warehouses' | 'items' | 'categories' | 'stock-movements' | 'item-balances' | 'item-detail' | 'stock-transfer-form' | 'material-requests' | 'material-request-form' | 'delivery-notes' | 'delivery-note-form' | 'purchase-receipts' | 'purchase-receipt-form' | 'pick-lists' | 'pick-list-form'
 type AccountingView = 'journal-entries' | 'chart-of-accounts'
-type SalesView = 'customers' | 'sales-invoices' | 'receipt-vouchers' | 'sales-orders' | 'customer-form' | 'sales-order-form' | 'sales-invoice-form'
+type SalesView = 'customers' | 'sales-invoices' | 'sales-orders' | 'customer-form' | 'sales-order-form' | 'sales-invoice-form'
 type PurchasesView = 'suppliers' | 'purchase-invoices' | 'purchase-orders' | 'supplier-form' | 'purchase-order-form' | 'purchase-invoice-form'
 type ReportsView = 'trial-balance' | 'balance-sheet' | 'income-statement' | 'inventory-report' | 'sales-report' | 'purchase-report' | 'customer-aging' | 'supplier-aging'
 type InvestorsView = 'investors-list'
@@ -97,6 +97,8 @@ interface AppState {
   setCurrentCompany: (id: string) => void
   setCompanies: (companies: CompanyInfo[]) => void
   addCompany: (company: CompanyInfo) => void
+  updateCompany: (id: string, data: Partial<CompanyInfo>) => void
+  removeCompany: (id: string) => void
   setAccessToken: (token: string | null) => void
   hydrate: () => void
   logout: () => void
@@ -166,6 +168,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       accessToken: get().accessToken,
       companies: newCompanies,
       currentCompanyId: get().currentCompanyId,
+    })
+  },
+  updateCompany: (id, data) => {
+    const newCompanies = get().companies.map((c) =>
+      c.id === id ? { ...c, ...data } : c
+    )
+    set({ companies: newCompanies })
+    saveToStorage({
+      user: get().user,
+      accessToken: get().accessToken,
+      companies: newCompanies,
+      currentCompanyId: get().currentCompanyId,
+    })
+  },
+  removeCompany: (id) => {
+    const newCompanies = get().companies.filter((c) => c.id !== id)
+    const newCurrentId = get().currentCompanyId === id
+          ? (newCompanies[0]?.id ?? null)
+          : get().currentCompanyId
+    set({ companies: newCompanies, currentCompanyId: newCurrentId })
+    saveToStorage({
+      user: get().user,
+      accessToken: get().accessToken,
+      companies: newCompanies,
+      currentCompanyId: newCurrentId,
     })
   },
   setAccessToken: (token) => {

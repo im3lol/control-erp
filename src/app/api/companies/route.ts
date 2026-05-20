@@ -45,7 +45,22 @@ export async function GET(request: NextRequest) {
           taxNumber: true,
           status: true,
           vatRate: true,
+          address: true,
+          phone: true,
+          email: true,
+          fiscalYearStart: true,
           createdAt: true,
+          _count: {
+            select: {
+              items: true,
+              customers: true,
+              suppliers: true,
+              salesInvoices: true,
+              purchaseInvoices: true,
+              warehouses: true,
+              journalEntries: true,
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
       })
