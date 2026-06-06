@@ -115,11 +115,11 @@ export async function GET(request: NextRequest) {
 
     // Account type distribution for chart
     const accountTypes = [
-      { type: 'ASSET', label: 'أصول', color: 'bg-cyan-400' },
-      { type: 'LIABILITY', label: 'خصوم', color: 'bg-red-400' },
-      { type: 'EQUITY', label: 'حقوق ملكية', color: 'bg-purple-400' },
-      { type: 'REVENUE', label: 'إيرادات', color: 'bg-emerald-400' },
-      { type: 'EXPENSE', label: 'مصروفات', color: 'bg-orange-400' },
+      { type: 'ASSET', label: 'الأصول', color: 'bg-cyan-400' },
+      { type: 'LIABILITY', label: 'الالتزامات', color: 'bg-red-400' },
+      { type: 'EQUITY', label: 'حقوق الملكية', color: 'bg-purple-400' },
+      { type: 'REVENUE', label: 'الإيرادات', color: 'bg-emerald-400' },
+      { type: 'EXPENSE', label: 'المصروفات', color: 'bg-orange-400' },
     ]
 
     const accountDistribution = accountTypes.map((at) => {
