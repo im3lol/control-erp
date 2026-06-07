@@ -57,6 +57,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useAppStore } from '@/lib/store'
 import { formatCurrency } from '@/lib/erp-utils'
+import { cn } from '@/lib/utils'
 
 interface Category {
   id: string
@@ -190,6 +191,16 @@ export default function ItemsList() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Import functionality
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{
+    successCount: number;
+    errorCount: number;
+    errors: string[];
+  } | null>(null)
 
   // Navigation to detail page
   const setSelectedItemId = useAppStore(state => state.setSelectedItemId)
@@ -548,6 +559,44 @@ export default function ItemsList() {
     }
   }
 
+  const handleImport = async () => {
+    if (!importFile) {
+      toast.error('يرجى اختيار ملف Excel')
+      return
+    }
+
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const form = new FormData()
+      form.append('file', importFile)
+      form.append('companyId', companyId || '')
+
+      const res = await fetch('/api/inventory/items/import', {
+        method: 'POST',
+        body: form,
+      })
+
+      const data = await res.json()
+      if (res.ok) {
+        setImportResult(data)
+        if (data.successCount > 0) {
+          toast.success(`تم استيراد ${data.successCount} صنف بنجاح`)
+          fetchItems()
+        }
+        if (data.errorCount > 0) {
+          toast.warning(`${data.errorCount} صف به أخطاء`)
+        }
+      } else {
+        toast.error(data.error || 'فشل في استيراد الملف')
+      }
+    } catch {
+      toast.error('حدث خطأ أثناء الاستيراد')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   if (loading) {
     return (
       <Card className="border shadow-sm">
@@ -584,13 +633,23 @@ export default function ItemsList() {
                 </p>
               </div>
             </div>
-            <Button
-              onClick={handleOpenAdd}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              إضافة صنف
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setImportDialogOpen(true)}
+                variant="outline"
+                className="gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                استيراد
+              </Button>
+              <Button
+                onClick={handleOpenAdd}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                إضافة صنف
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -1073,6 +1132,144 @@ export default function ItemsList() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Dialog */}
+      <Dialog
+        open={importDialogOpen}
+        onOpenChange={(open) => {
+          setImportDialogOpen(open)
+          if (!open) {
+            setImportFile(null)
+            setImportResult(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>استيراد أصناف</DialogTitle>
+            <DialogDescription>
+              قم بتحميل ملف Excel يحتوي على الأصناف التي ترغب في استيرادها.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {!importResult ? (
+              <>
+                <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center">
+                  {importFile ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <Package className="h-8 w-8 text-emerald-600" />
+                        <div className="text-right">
+                          <p className="font-medium">{importFile.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {(importFile.size / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8"
+                        onClick={() => setImportFile(null)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer">
+                      <Upload className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm text-slate-500">اضغط لاختيار ملف Excel</p>
+                      <p className="text-xs text-slate-400 mt-1">.xlsx, .xls</p>
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) setImportFile(file)
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                  <p className="font-medium mb-1">تنسيق الملف:</p>
+                  <ul className="list-disc list-inside space-y-1 text-xs">
+                    <li><strong>code</strong>: كود الصنف (مطلوب)</li>
+                    <li><strong>nameAr</strong>: الاسم بالعربية</li>
+                    <li><strong>nameEn</strong>: الاسم بالإنجليزية</li>
+                    <li><strong>categoryCode</strong>: كود الفئة (اختياري)</li>
+                    <li><strong>uomCode</strong>: كود الوحدة (اختياري)</li>
+                    <li><strong>costMethod</strong>: طريقة التكلفة (FIFO أو WAC)</li>
+                    <li><strong>sellPrice</strong>: سعر البيع</li>
+                    <li><strong>minStock</strong>: الحد الأدنى</li>
+                    <li><strong>maxStock</strong>: الحد الأقصى</li>
+                    <li><strong>description</strong>: الوصف</li>
+                    <li><strong>isActive</strong>: نشط (true/false)</li>
+                  </ul>
+                </div>
+              </>
+            ) : (
+              <div className={cn(
+                'p-4 rounded-lg border text-sm',
+                importResult.errorCount === 0
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-800'
+              )}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium">نتائج الاستيراد:</span>
+                  <span>
+                    {importResult.successCount} ناجح، {importResult.errorCount} فشل
+                  </span>
+                </div>
+                {importResult.errors.length > 0 && (
+                  <div className="mt-2 border-t border-amber-300 pt-2 max-h-40 overflow-y-auto">
+                    <ul className="list-disc list-inside space-y-1 text-xs">
+                      {importResult.errors.map((err, idx) => (
+                        <li key={idx}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportDialogOpen(false)
+                setImportFile(null)
+                setImportResult(null)
+              }}
+            >
+              {importResult ? 'إغلاق' : 'إلغاء'}
+            </Button>
+            {!importResult && (
+              <Button
+                onClick={handleImport}
+                disabled={importing || !importFile}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+              >
+                {importing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    جاري الاستيراد...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    استيراد
+                  </>
+                )}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
